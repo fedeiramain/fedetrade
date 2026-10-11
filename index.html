@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screener & Portafolio Cripto Binance con Import/Export JSON</title>
+  <style>
+    :root {
+      --bg-main: #0b0e11;
+      --bg-card: #181a20;
+      --bg-card-hover: #1e2329;
+      --border-color: #2b313a;
+      --text-main: #eaecef;
+      --text-muted: #848e9c;
+      --accent-green: #0ecb81;
+      --accent-green-bg: rgba(14, 203, 129, 0.12);
+      --accent-red: #f6465d;
+      --accent-red-bg: rgba(246, 70, 93, 0.12);
+      --accent-yellow: #f0b90b;
+      --accent-blue: #3861fb;
+      --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      padding: 16px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .title-area h1 { font-size: 1.3rem; font-weight: 700; color: #fff; }
+    .title-area p { color: var(--text-muted); font-size: 0.85rem; }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: var(--bg-card-hover); border-color: var(--text-muted); }
+    .btn-primary { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+    .btn-primary:hover { opacity: 0.9; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-card);
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border-color);
+      font-size: 0.8rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--accent-yellow);
+      display: inline-block;
+    }
+    .status-dot.connected { background-color: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      visibility: hidden;
+      opacity: 0;
+      transition: all 0.25s ease;
+    }
+    .modal-overlay.active { visibility: visible; opacity: 1; }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      width: 90%;
+      max-width: 750px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .modal-header h2 { font-size: 1.1rem; color: #fff; }
+
+    .search-box-container {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--bg-main);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--accent-blue); }
+
+    .search-results {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #111317;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 10;
+      display: none;
+    }
+    .search-results.active { display: block; }
+    .search-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid #1a1d24;
+    }
+    .search-item:hover { background: var(--bg-card-hover); }
+
+    .portfolio-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 8px;
+      background: var(--bg-main);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+
+    .chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 4px 10px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+    .chip-remove {
+      color: var(--accent-red);
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .json-tools {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: rgba(0,0,0,0.25);
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px dashed var(--border-color);
+      margin-bottom: 16px;
+    }
+
+    .controls-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .controls-group { display: flex; align-items: center; gap: 12px; }
+
+    select {
+      background: var(--bg-main);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+    }
+
+    .charts-container {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .symbol-name { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .symbol-price { font-size: 1.1rem; font-family: var(--font-mono); font-weight: 600; }
+
+    .projection-box {
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .proj-item { display: flex; flex-direction: column; }
+    .proj-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; }
+    .proj-val { font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem; }
+    .proj-val.bull { color: var(--accent-green); }
+    .proj-val.bear { color: var(--accent-red); }
+
+    .prob-bar-container { margin-bottom: 10px; }
+    .prob-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .prob-bar {
+      height: 6px;
+      width: 100%;
+      background: var(--accent-red);
+      border-radius: 3px;
+      overflow: hidden;
+      display: flex;
+    }
+    .prob-fill {
+      height: 100%;
+      background: var(--accent-green);
+      transition: width 0.3s ease;
+    }
+
+    canvas {
+      width: 100%;
+      height: 220px;
+      background: #111317;
+      border-radius: 4px;
+    }
+
+    .table-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      height: calc(100vh - 160px);
+      overflow-y: auto;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; color: var(--text-muted); font-size: 0.75rem; padding: 8px 4px; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; background: var(--bg-card); }
+    td { padding: 8px 4px; border-bottom: 1px solid #22272e; font-size: 0.82rem; }
+
+    .rank-num { color: var(--text-muted); font-weight: 600; width: 24px; }
+    .val-up { color: var(--accent-green); }
+    .val-down { color: var(--accent-red); }
+
+    .badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .badge-bull { background: var(--accent-green-bg); color: var(--accent-green); }
+    .badge-bear { background: var(--accent-red-bg); color: var(--accent-red); }
+
+    @media (max-width: 1200px) {
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .charts-container { grid-template-columns: 1fr; }
+      .table-container { height: 400px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-area">
+      <h1>Portafolio Cripto de FEDE</h1>
+      <p>Análisis en directo con respaldo y carga rápida vía</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" onclick="openModal()">⚙ Mi Portafolio (<span id="selected-count">0</span>)</button>
+      <div class="status-badge">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-text">Conectando...</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="controls-bar">
+    <div class="controls-group">
+      <label for="filter-mode">Filtrar Gráficos por Tendencia:</label>
+      <select id="filter-mode" onchange="updateUI()">
+        <option value="abs">Mayor Fuerza Absoluta (Mejores Alcistas o Bajistas)</option>
+        <option value="bull">Solo Mayor Probabilidad Alcista</option>
+        <option value="bear">Solo Mayor Probabilidad Bajista</option>
+      </select>
+    </div>
+
+    <div class="controls-group">
+      <label for="display-limit">Cantidad de Gráficos Visibles:</label>
+      <select id="display-limit" onchange="updateUI()">
+        <option value="4">Top 4 Monedas</option>
+        <option value="6">Top 6 Monedas</option>
+        <option value="10" selected>Top 10 Monedas</option>
+        <option value="16">Top 16 Monedas</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div>
+      <h2 style="font-size: 1rem; margin-bottom: 12px;">Las Mejores Tendencias de tu Portafolio</h2>
+      <div id="charts-grid" class="charts-container"></div>
+    </div>
+
+    <div class="table-container">
+      <h2 style="font-size: 1rem; margin-bottom: 12px;">Ranking General</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Par</th>
+            <th>Precio</th>
+            <th>Prob. Alcista</th>
+            <th>Obj. Máx</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal de Portafolio + Herramientas JSON -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Gestionar mi Portafolio</h2>
+        <button class="btn" onclick="closeModal()">✕ Cerrar</button>
+      </div>
+
+      <div class="search-box-container">
+        <input type="text" id="search-input" class="search-input" placeholder="Buscar par en Binance (ej: SOL, RENDER, NEAR, PEPE)..." oninput="handleSearch(this.value)">
+        <div id="search-results" class="search-results"></div>
+      </div>
+
+      <p style="margin-bottom: 6px; color: var(--text-muted); font-size: 0.8rem;">Monedas actuales en el portafolio:</p>
+      <div id="portfolio-chips" class="portfolio-chips"></div>
+
+      <!-- Módulo JSON Importar y Exportar -->
+      <div class="json-tools">
+        <span style="font-weight: 600; color: var(--accent-yellow);">Archivos JSON:</span>
+        <button class="btn" onclick="exportJSON()">📥 Exportar JSON</button>
+        <button class="btn" onclick="document.getElementById('import-file').click()">📤 Importar JSON</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(event)">
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn" onclick="resetDefaultPortfolio()">Restaurar Por Defecto</button>
+        <button class="btn btn-primary" onclick="applySelection()">Guardar y Re-analizar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_PORTFOLIO = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","AVAXUSDT","DOTUSDT","LINKUSDT","NEARUSDT","SUIUSDT","PEPEUSDT","FETUSDT","RENDERUSDT"];
+    
+    let allBinanceSymbols = [];
+    let userPortfolio = new Set();
+    let state = {};
+    let ws = null;
+    let depthInterval = null;
+
+    async function init() {
+      loadSavedPortfolio();
+      await fetchAllBinanceSymbols();
+      renderPortfolioChips();
+      startAnalysis();
+      setInterval(updateUI, 1000);
+    }
+
+    function loadSavedPortfolio() {
+      const saved = localStorage.getItem('crypto_user_portfolio');
+      if (saved) {
+        try {
+          userPortfolio = new Set(JSON.parse(saved));
+        } catch(e) {
+          userPortfolio = new Set(DEFAULT_PORTFOLIO);
+        }
+      } else {
+        userPortfolio = new Set(DEFAULT_PORTFOLIO);
+      }
+      document.getElementById('selected-count').innerText = userPortfolio.size;
+    }
+
+    function savePortfolio() {
+      localStorage.setItem('crypto_user_portfolio', JSON.stringify(Array.from(userPortfolio)));
+      document.getElementById('selected-count').innerText = userPortfolio.size;
+    }
+
+    // Funciones JSON para Importación / Exportación
+    function exportJSON() {
+      const portfolioArray = Array.from(userPortfolio);
+      const dataStr = JSON.stringify(portfolioArray, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `portafolio_cripto_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const importedArr = JSON.parse(e.target.result);
+          if (Array.isArray(importedArr)) {
+            userPortfolio = new Set(importedArr.map(s => s.toUpperCase()));
+            savePortfolio();
+            renderPortfolioChips();
+            alert("¡Portafolio importado exitosamente desde JSON!");
+          } else {
+            alert("Error: El archivo JSON debe contener una lista válida de pares (ej: [\"BTCUSDT\", \"SOLUSDT\"]).");
+          }
+        } catch (err) {
+          alert("Error al leer el archivo JSON.");
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = ''; // Limpiar input para permitir re-importar el mismo archivo
+    }
+
+    async function fetchAllBinanceSymbols() {
+      try {
+        const res = await fetch('https://api.binance.com/api/v3/exchangeInfo');
+        const data = await res.json();
+        allBinanceSymbols = data.symbols
+          .filter(s => s.quoteAsset === 'USDT' && s.status === 'TRADING')
+          .map(s => s.symbol);
+      } catch (e) {
+        console.error("Error al obtener símbolos:", e);
+      }
+    }
+
+    function handleSearch(query) {
+      const resultsContainer = document.getElementById('search-results');
+      const q = query.trim().toUpperCase();
+      
+      if (!q) {
+        resultsContainer.classList.remove('active');
+        return;
+      }
+
+      const matches = allBinanceSymbols.filter(s => s.includes(q)).slice(0, 10);
+      if (matches.length === 0) {
+        resultsContainer.classList.remove('active');
+        return;
+      }
+
+      resultsContainer.innerHTML = '';
+      matches.forEach(sym => {
+        const div = document.createElement('div');
+        div.className = 'search-item';
+        div.innerHTML = `<span><strong>${sym}</strong></span> <span>${userPortfolio.has(sym) ? '✔ En portafolio' : '+ Agregar'}</span>`;
+        div.onclick = () => {
+          addToPortfolio(sym);
+          document.getElementById('search-input').value = '';
+          resultsContainer.classList.remove('active');
+        };
+        resultsContainer.appendChild(div);
+      });
+      resultsContainer.classList.add('active');
+    }
+
+    function addToPortfolio(sym) {
+      userPortfolio.add(sym);
+      savePortfolio();
+      renderPortfolioChips();
+    }
+
+    function removeFromPortfolio(sym) {
+      userPortfolio.delete(sym);
+      savePortfolio();
+      renderPortfolioChips();
+    }
+
+    function resetDefaultPortfolio() {
+      userPortfolio = new Set(DEFAULT_PORTFOLIO);
+      savePortfolio();
+      renderPortfolioChips();
+    }
+
+    function renderPortfolioChips() {
+      const container = document.getElementById('portfolio-chips');
+      container.innerHTML = '';
+      userPortfolio.forEach(sym => {
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.innerHTML = `<span>${sym}</span> <span class="chip-remove" onclick="removeFromPortfolio('${sym}')">✕</span>`;
+        container.appendChild(chip);
+      });
+    }
+
+    function openModal() { document.getElementById('modal-overlay').classList.add('active'); }
+    function closeModal() { 
+      document.getElementById('modal-overlay').classList.remove('active'); 
+      document.getElementById('search-results').classList.remove('active');
+    }
+
+    function applySelection() {
+      closeModal();
+      startAnalysis();
+    }
+
+    async function startAnalysis() {
+      if (ws) { ws.close(); ws = null; }
+      if (depthInterval) clearInterval(depthInterval);
+
+      state = {};
+      const activeList = Array.from(userPortfolio);
+      
+      if (activeList.length === 0) {
+        document.getElementById('status-text').innerText = "Portafolio vacío";
+        document.getElementById('charts-grid').innerHTML = '';
+        document.getElementById('table-body').innerHTML = '';
+        return;
+      }
+
+      activeList.forEach(sym => {
+        state[sym] = {
+          symbol: sym,
+          klines: [],
+          price: 0,
+          rsi: 50,
+          macd: 0,
+          signal: 0,
+          hist: 0,
+          obi: 0,
+          probBull: 50,
+          targetHigh: 0,
+          targetLow: 0,
+          score: 50
+        };
+      });
+
+      await fetchHistories(activeList);
+      connectWebSocket(activeList);
+      startDepthPolling(activeList);
+    }
+
+    async function fetchHistories(activeList) {
+      document.getElementById('status-text').innerText = "Cargando datos...";
+      const promises = activeList.map(async sym => {
+        try {
+          const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=15m&limit=60`);
+          const data = await res.json();
+          state[sym].klines = data.map(d => ({
+            time: d[0],
+            open: parseFloat(d[1]),
+            high: parseFloat(d[2]),
+            low: parseFloat(d[3]),
+            close: parseFloat(d[4]),
+            volume: parseFloat(d[5])
+          }));
+          if (state[sym].klines.length > 0) {
+            state[sym].price = state[sym].klines[state[sym].klines.length - 1].close;
+          }
+          calculateIndicators(sym);
+        } catch (e) {
+          console.error("Error klines:", sym, e);
+        }
+      });
+      await Promise.all(promises);
+      document.getElementById('status-text').innerText = "Datos cargados";
+    }
+
+    function calculateIndicators(sym) {
+      const klines = state[sym].klines;
+      if (!klines || klines.length < 30) return;
+
+      const closes = klines.map(k => k.close);
+      
+      // RSI (14)
+      let gains = 0, losses = 0;
+      for (let i = closes.length - 14; i < closes.length; i++) {
+        const diff = closes[i] - closes[i - 1];
+        if (diff >= 0) gains += diff;
+        else losses -= diff;
+      }
+      const avgGain = gains / 14;
+      const avgLoss = losses / 14;
+      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      state[sym].rsi = 100 - (100 / (1 + rs));
+
+      // MACD (12, 26, 9)
+      const ema12 = calcEMA(closes, 12);
+      const ema26 = calcEMA(closes, 26);
+      const macdLine = ema12[ema12.length - 1] - ema26[ema26.length - 1];
+      
+      const macdHistory = [];
+      for(let i = 0; i < ema12.length; i++) {
+        macdHistory.push(ema12[i] - ema26[i]);
+      }
+      const signalLine = calcEMA(macdHistory, 9).pop();
+      
+      state[sym].macd = macdLine;
+      state[sym].signal = signalLine;
+      state[sym].hist = macdLine - signalLine;
+
+      calculateProbabilityAndTargets(sym);
+    }
+
+    function calcEMA(data, period) {
+      const k = 2 / (period + 1);
+      let emaArr = [data[0]];
+      for (let i = 1; i < data.length; i++) {
+        emaArr.push(data[i] * k + emaArr[i - 1] * (1 - k));
+      }
+      return emaArr;
+    }
+
+    function calculateProbabilityAndTargets(sym) {
+      const item = state[sym];
+      
+      let techScore = 50;
+      if (item.rsi > 50) techScore += (item.rsi - 50) * 0.6;
+      else techScore -= (50 - item.rsi) * 0.6;
+
+      if (item.hist > 0) techScore += 15;
+      else techScore -= 15;
+
+      let obiScore = item.obi * 30;
+      let finalProb = techScore + obiScore;
+      finalProb = Math.max(5, Math.min(95, finalProb));
+      
+      item.probBull = finalProb;
+      item.score = finalProb;
+
+      const klines = item.klines;
+      if (!klines || klines.length === 0) return;
+
+      let atr = 0;
+      for (let i = klines.length - 14; i < klines.length; i++) {
+        atr += (klines[i].high - klines[i].low);
+      }
+      atr = atr / 14;
+
+      const probFactor = (item.probBull / 100);
+      item.targetHigh = item.price + (atr * (1 + probFactor));
+      item.targetLow = item.price - (atr * (2 - probFactor));
+    }
+
+    function connectWebSocket(activeList) {
+      const streams = activeList.map(s => `${s.toLowerCase()}@kline_15m`).join('/');
+      ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+
+      ws.onopen = () => {
+        document.getElementById('status-dot').classList.add('connected');
+        document.getElementById('status-text').innerText = "En vivo (WebSockets)";
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (!msg.data || !msg.data.k) return;
+
+        const k = msg.data.k;
+        const sym = k.s;
+        if (!state[sym]) return;
+
+        const candle = {
+          time: k.t,
+          open: parseFloat(k.o),
+          high: parseFloat(k.h),
+          low: parseFloat(k.l),
+          close: parseFloat(k.c),
+          volume: parseFloat(k.v)
+        };
+
+        state[sym].price = candle.close;
+        const lastIdx = state[sym].klines.length - 1;
+        if (lastIdx >= 0 && state[sym].klines[lastIdx].time === candle.time) {
+          state[sym].klines[lastIdx] = candle;
+        } else {
+          state[sym].klines.push(candle);
+          if (state[sym].klines.length > 100) state[sym].klines.shift();
+        }
+
+        calculateIndicators(sym);
+      };
+
+      ws.onclose = () => {
+        document.getElementById('status-dot').classList.remove('connected');
+      };
+    }
+
+    function startDepthPolling(activeList) {
+      depthInterval = setInterval(async () => {
+        for (let sym of activeList) {
+          try {
+            const res = await fetch(`https://api.binance.com/api/v3/depth?symbol=${sym}&limit=20`);
+            const depth = await res.json();
+            
+            let bidVol = depth.bids.reduce((acc, b) => acc + parseFloat(b[1]), 0);
+            let askVol = depth.asks.reduce((acc, a) => acc + parseFloat(a[1]), 0);
+            
+            if (state[sym]) {
+              state[sym].obi = (bidVol - askVol) / (bidVol + askVol || 1);
+              calculateProbabilityAndTargets(sym);
+            }
+          } catch(e){}
+        }
+      }, 5000);
+    }
+
+    function updateUI() {
+      const allItems = Object.values(state);
+      if (allItems.length === 0) return;
+
+      const mode = document.getElementById('filter-mode').value;
+      const limit = parseInt(document.getElementById('display-limit').value);
+
+      let sorted = [...allItems];
+
+      if (mode === 'bull') {
+        sorted.sort((a, b) => b.probBull - a.probBull);
+      } else if (mode === 'bear') {
+        sorted.sort((a, b) => a.probBull - b.probBull);
+      } else {
+        sorted.sort((a, b) => Math.abs(b.probBull - 50) - Math.abs(a.probBull - 50));
+      }
+
+      const topCharts = sorted.slice(0, limit);
+
+      renderChartsGrid(topCharts);
+      renderTable(allItems.sort((a, b) => b.probBull - a.probBull));
+    }
+
+    function renderChartsGrid(items) {
+      const container = document.getElementById('charts-grid');
+      container.innerHTML = '';
+
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const isBull = item.probBull >= 50;
+
+        card.innerHTML = `
+          <div class="card-header">
+            <div>
+              <div class="symbol-name">${item.symbol}</div>
+              <div class="symbol-price">${formatPrice(item.price)}</div>
+            </div>
+            <span class="badge ${isBull ? 'badge-bull' : 'badge-bear'}">
+              ${isBull ? 'ALCISTA' : 'BAJISTA'}
+            </span>
+          </div>
+
+          <div class="prob-bar-container">
+            <div class="prob-labels">
+              <span>Prob. Alcista</span>
+              <span class="${isBull ? 'val-up' : 'val-down'}">${item.probBull.toFixed(1)}%</span>
+            </div>
+            <div class="prob-bar">
+              <div class="prob-fill" style="width: ${item.probBull}%;"></div>
+            </div>
+          </div>
+
+          <div class="projection-box">
+            <div class="proj-item">
+              <span class="proj-label">Máx. Probable</span>
+              <span class="proj-val bull">${formatPrice(item.targetHigh)}</span>
+            </div>
+            <div class="proj-item">
+              <span class="proj-label">Mín. Probable</span>
+              <span class="proj-val bear">${formatPrice(item.targetLow)}</span>
+            </div>
+          </div>
+
+          <canvas id="canvas-${item.symbol}"></canvas>
+        `;
+
+        container.appendChild(card);
+        drawCanvasChart(`canvas-${item.symbol}`, item);
+      });
+    }
+
+    function drawCanvasChart(canvasId, item) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      
+      const width = canvas.width = canvas.clientWidth * window.devicePixelRatio;
+      const height = canvas.height = canvas.clientHeight * window.devicePixelRatio;
+
+      ctx.clearRect(0, 0, width, height);
+
+      const klines = item.klines.slice(-30);
+      if (klines.length === 0) return;
+
+      const prices = klines.flatMap(k => [k.high, k.low]);
+      prices.push(item.targetHigh, item.targetLow);
+      
+      const minP = Math.min(...prices);
+      const maxP = Math.max(...prices);
+      const range = (maxP - minP) || 1;
+
+      const getY = (price) => height - ((price - minP) / range) * (height - 30) - 15;
+      const candleWidth = width / klines.length;
+
+      klines.forEach((k, i) => {
+        const x = i * candleWidth + candleWidth / 2;
+        const openY = getY(k.open);
+        const closeY = getY(k.close);
+        const highY = getY(k.high);
+        const lowY = getY(k.low);
+
+        const isUp = k.close >= k.open;
+        ctx.strokeStyle = isUp ? '#0ecb81' : '#f6465d';
+        ctx.fillStyle = isUp ? '#0ecb81' : '#f6465d';
+
+        ctx.beginPath();
+        ctx.moveTo(x, highY);
+        ctx.lineTo(x, lowY);
+        ctx.stroke();
+
+        ctx.fillRect(x - candleWidth * 0.3, Math.min(openY, closeY), candleWidth * 0.6, Math.max(Math.abs(closeY - openY), 1));
+      });
+
+      // Líneas de Proyección de Precios
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = '#0ecb81';
+      ctx.lineWidth = 1.5;
+      const targetY = getY(item.targetHigh);
+      ctx.beginPath();
+      ctx.moveTo(0, targetY);
+      ctx.lineTo(width, targetY);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#f6465d';
+      const lowY = getY(item.targetLow);
+      ctx.beginPath();
+      ctx.moveTo(0, lowY);
+      ctx.lineTo(width, lowY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function renderTable(items) {
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+
+      items.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="rank-num">${index + 1}</td>
+          <td style="font-weight:700;">${item.symbol}</td>
+          <td style="font-family:var(--font-mono);">${formatPrice(item.price)}</td>
+          <td style="font-weight:700;" class="${item.probBull >= 50 ? 'val-up' : 'val-down'}">${item.probBull.toFixed(1)}%</td>
+          <td style="font-family:var(--font-mono);" class="val-up">${formatPrice(item.targetHigh)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function formatPrice(val) {
+      if (!val) return '0.00';
+      if (val >= 1000) return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (val >= 1) return val.toFixed(3);
+      return val.toFixed(6);
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
