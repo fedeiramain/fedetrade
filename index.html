@@ -324,6 +324,15 @@
     </div>
 
     <div class="controls-group">
+      <label for="rsi-mode">RSI:</label>
+      <select id="rsi-mode" onchange="changeRsiMode(this.value)" title="Período del RSI. Auto: cada par usa el que mejor funcionó en su backtest">
+        <option value="9">9 períodos</option>
+        <option value="14">14 períodos</option>
+        <option value="auto">Auto (el mejor por par)</option>
+      </select>
+    </div>
+
+    <div class="controls-group">
       <label for="display-limit">Gráficos:</label>
       <select id="display-limit" onchange="reorderAndRenderGrid()">
         <option value="4">Top 4</option>
@@ -424,6 +433,7 @@
               <th title="TP1 / TP2 / TP3 alcanzados antes del SL, en señales alcistas">TP alcistas</th>
               <th title="TP1 / TP2 / TP3 alcanzados antes del SL, en señales bajistas">TP bajistas</th>
               <th title="Retorno medio al cierre del horizonte, en la dirección de la señal, descontando comisiones. Solo señales con puntaje ≥60 o ≤40">Ret. neto señales fuertes</th>
+              <th title="Skill fuera de muestra con cada período de RSI. ✓ = el que está en uso para ese par">RSI 9 vs 14</th>
             </tr>
           </thead>
           <tbody id="bt-body"></tbody>
@@ -484,6 +494,7 @@
       warmup: 60
     };
     const BUCKETS = [5, 30, 40, 45, 50, 55, 60, 70, 95.0001];
+    const RSI_PERIODS = [9, 14];
 
     const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
@@ -618,7 +629,7 @@
       const rv = relVolSeries(kl, 20);
       item.ser = {
         close,
-        rsi: rsiSeries(close),
+        rsiBy: Object.fromEntries(RSI_PERIODS.map(p => [p, rsiSeries(close, p)])),
         hist,
         atr: atrSeries(kl),
         relVol: rv.rel,
@@ -627,6 +638,40 @@
         htf: htfTrendSeries(kl, item.htfKlines, TF_MS[tf], TF_MS[HTF_OF[tf]]),
         rs: item.symbol === 'BTCUSDT' ? new Array(kl.length).fill(null) : rsSeries(kl, btcKl, CFG.rsBars)
       };
+      item.ser.rsi = item.ser.rsiBy[item.rsiP] || item.ser.rsiBy[14];
+    }
+
+    // Bandas de sobrecompra/sobreventa: el RSI corto llega más seguido a los extremos, por eso 80/20
+    const rsiBands = p => p <= 9 ? [80, 20] : [70, 30];
+
+    // Elige el período de RSI de cada par. En "auto" usa el que mejor calibró en la parte de
+    // entrenamiento del backtest (el 70% inicial), nunca el tramo de validación.
+    function chooseRsi(item, mode) {
+      if (mode !== 'auto') return +mode;
+      let best = 14, bestScore = -Infinity;
+      for (const p of RSI_PERIODS) {
+        const b = item.btBy && item.btBy[p];
+        if (b && b.trainSkill != null && b.trainSkill > bestScore + 1e-9) { best = p; bestScore = b.trainSkill; }
+      }
+      return best;
+    }
+
+    function applyRsiChoice(item, mode) {
+      item.rsiP = chooseRsi(item, mode);
+      if (item.ser) item.ser.rsi = item.ser.rsiBy[item.rsiP];
+      item.bt = item.btBy ? item.btBy[item.rsiP] : null;
+    }
+
+    // Backtest con cada período de RSI (comparación) y aplica la elección
+    function runBacktests(item, tf, mode) {
+      item.btBy = {};
+      if (item.ser) {
+        for (const p of RSI_PERIODS) {
+          item.ser.rsi = item.ser.rsiBy[p];
+          item.btBy[p] = runBacktest(item, tf);
+        }
+      }
+      applyRsiChoice(item, mode);
     }
 
     // Puntaje técnico 5–95 (50 = neutro). Usa solo datos de la vela i y anteriores.
@@ -836,6 +881,14 @@
         }
         oos = { n: test.length, acc: acc / test.length, accBase: accBase / test.length, skill: brBase > 0 ? 1 - br / brBase : 0 };
       }
+      // Calidad dentro del tramo de entrenamiento: sirve para elegir parámetros sin tocar la validación
+      let trB = 0, trBase = 0;
+      for (const r of train) {
+        const y = r.up ? 1 : 0;
+        trB += (calibrate(r.s, fitTr) - y) ** 2;
+        trBase += (fitTr.base - y) ** 2;
+      }
+      const trainSkill = trBase > 0 ? 1 - trB / trBase : 0;
 
       const tp = {};
       for (const d of [1, -1]) {
@@ -863,7 +916,7 @@
       }
 
       return {
-        n: recs.length, H, fit, oos, tp, strong,
+        n: recs.length, H, fit, oos, tp, strong, trainSkill,
         from: kl[recs[0].t].time, to: kl[recs[recs.length - 1].t].time
       };
     }
@@ -941,7 +994,8 @@
         rsi: null, atr: null, atrRank: null, htfTrend: 0, rs: null, relVolLive: null,
         clusters: [], vp: null, sr: null, weeklySR: { resistance: 0, support: 0 },
         tp1: 0, tp2: 0, tp3: 0, sl: 0, ready: false, loadError: null,
-        bookSnaps: [], book: null
+        bookSnaps: [], book: null,
+        rsiP: 14, btBy: null
       };
     }
 
@@ -1054,6 +1108,26 @@
     const dirty = new Set();           // pares con cambios pendientes de recalcular
     const needBt = new Set();          // pares que necesitan rehacer el backtest (vela nueva)
     let btSelected = null;
+
+    // Período del RSI: '9', '14' o 'auto'. Por defecto 9.
+    let rsiMode = '9';
+    try { const m = localStorage.getItem('crypto_rsi_mode'); if (['9', '14', 'auto'].includes(m)) rsiMode = m; } catch (e) {}
+
+    // Cambiar el RSI no requiere recalcular el backtest: los dos períodos ya están medidos
+    function changeRsiMode(mode) {
+      rsiMode = mode;
+      try { localStorage.setItem('crypto_rsi_mode', mode); } catch (e) {}
+      const now = Date.now();
+      Object.values(state).forEach(item => {
+        if (item.btBy) applyRsiChoice(item, mode);
+        else { item.rsiP = mode === 'auto' ? 14 : +mode; if (item.ser) item.ser.rsi = item.ser.rsiBy[item.rsiP]; }
+        try { computeLive(item, currentTimeframe, now); } catch (e) {}
+        updateTableRow(item.symbol);
+      });
+      reorderAndRenderGrid();
+      activeGridSymbols.forEach(updateSingleCard);
+      if (document.getElementById('bt-overlay').classList.contains('active')) renderBacktestModal();
+    }
 
     // ============================================================
     // SELECCIÓN DE GRÁFICOS (tildes del resumen)
@@ -1288,6 +1362,7 @@
       await fetchAllBinanceSymbols();
       renderPortfolioChips();
       document.getElementById('sel-all').addEventListener('change', e => toggleAll(e.target.checked));
+      document.getElementById('rsi-mode').value = rsiMode;
       let resizeT = null;
       window.addEventListener('resize', () => {
         clearTimeout(resizeT);
@@ -1472,7 +1547,7 @@
         document.getElementById('table-body').innerHTML = '';
         return;
       }
-      list.forEach(sym => { state[sym] = newItem(sym); });
+      list.forEach(sym => { state[sym] = newItem(sym); state[sym].rsiP = rsiMode === 'auto' ? 14 : +rsiMode; });
       document.getElementById('charts-grid').innerHTML = '<div class="empty-msg">Cargando historial...</div>';
       document.getElementById('table-body').innerHTML = '';
 
@@ -1503,7 +1578,7 @@
         const it = state[sym];
         try {
           computeSeries(it, tf, btcKl);
-          it.bt = runBacktest(it, tf);
+          runBacktests(it, tf, rsiMode);
           computeLive(it, tf, Date.now());
         } catch (e) { console.warn('Error de cálculo en', sym, e); }
       }
@@ -1616,7 +1691,7 @@
         try {
           computeSeries(item, tf, btcKl);
           if (needBt.has(sym) && budget > 0) {
-            item.bt = runBacktest(item, tf);
+            runBacktests(item, tf, rsiMode);
             needBt.delete(sym);
             budget--;
             btRan = true;
@@ -1763,7 +1838,11 @@
 
       // Métricas
       const chips = [];
-      if (item.rsi != null) chips.push(metricChip(`RSI ${item.rsi.toFixed(0)}`, item.rsi > 70 ? 'warn' : item.rsi < 30 ? 'warn' : ''));
+      if (item.rsi != null) {
+        const [hiB, loB] = rsiBands(item.rsiP);
+        chips.push(metricChip(`RSI${item.rsiP} ${item.rsi.toFixed(0)}`, item.rsi > hiB || item.rsi < loB ? 'warn' : '',
+          `RSI de ${item.rsiP} períodos${rsiMode === 'auto' ? ' (elegido por backtest)' : ''} · bandas ${hiB}/${loB}`));
+      }
       if (item.relVolLive != null) {
         const rv = item.relVolLive;
         chips.push(metricChip(`Vol ${rv.toFixed(1)}x`, rv > 1.5 ? 'up' : rv < 0.7 ? 'warn' : '', 'Volumen de la vela actual (proyectado) vs promedio de 20 velas'));
@@ -1847,7 +1926,15 @@
       const hist = ser && ser.hist[last];
       const atrPctTxt = item.atr ? `${(item.atr / p * 100).toFixed(2)}%` : '';
       const ind = sec('Indicadores', [
-        item.rsi != null && row('RSI 14', item.rsi.toFixed(1), item.rsi > 70 ? 'sobrecompra' : item.rsi < 30 ? 'sobreventa' : '', item.rsi > 70 || item.rsi < 30 ? 'val-down' : ''),
+        item.rsi != null && (() => {
+          const [hiB, loB] = rsiBands(item.rsiP);
+          return row(`RSI ${item.rsiP}${rsiMode === 'auto' ? ' (auto)' : ''}`, item.rsi.toFixed(1),
+            item.rsi > hiB ? 'sobrecompra' : item.rsi < loB ? 'sobreventa' : `bandas ${hiB}/${loB}`,
+            item.rsi > hiB || item.rsi < loB ? 'val-down' : '');
+        })(),
+        item.btBy && RSI_PERIODS.every(p => item.btBy[p] && item.btBy[p].oos) && row('Skill RSI 9 / 14',
+          RSI_PERIODS.map(p => `${item.btBy[p].oos.skill >= 0 ? '+' : ''}${(item.btBy[p].oos.skill * 100).toFixed(1)}%`).join(' / '),
+          'fuera de muestra'),
         hist != null && row('MACD hist.', hist > 0 ? 'positivo' : 'negativo', '', hist > 0 ? 'val-up' : 'val-down'),
         item.atr && row('ATR 14', formatPrice(item.atr), atrPctTxt),
         item.atrRank != null && row('Volatilidad', `p${item.atrRank.toFixed(0)}`, item.atrRank < 20 ? 'comprimida' : item.atrRank > 80 ? 'expandida' : 'normal'),
@@ -2009,7 +2096,7 @@
     function renderBacktestModal() {
       const tf = currentTimeframe;
       document.getElementById('bt-meta').innerText =
-        `Temporalidad ${TF_LABEL[tf]} · dirección medida a ${HORIZON_LABEL[tf]} · TP/SL evaluados dentro de ${TPWIN_LABEL[tf]} · comisiones ${CFG.feePct}% ida y vuelta. Tocá una fila para ver su curva de calibración.`;
+        `Temporalidad ${TF_LABEL[tf]} · dirección medida a ${HORIZON_LABEL[tf]} · TP/SL evaluados dentro de ${TPWIN_LABEL[tf]} · comisiones ${CFG.feePct}% ida y vuelta · RSI ${rsiMode === 'auto' ? 'automático por par' : rsiMode + ' períodos'} (las columnas muestran los resultados con el RSI en uso). Tocá una fila para ver su curva de calibración.`;
       const tbody = document.getElementById('bt-body');
       tbody.innerHTML = '';
       const items = Object.values(state).sort((a, b) => a.symbol.localeCompare(b.symbol));
@@ -2023,7 +2110,7 @@
         const tr = document.createElement('tr');
         if (item.symbol === btSelected) tr.className = 'selected';
         if (!bt) {
-          tr.innerHTML = `<td class="bold">${item.symbol}</td><td colspan="8" class="muted">${item.loadError ? 'Error de carga' : 'Historial insuficiente para backtest'}</td>`;
+          tr.innerHTML = `<td class="bold">${item.symbol}</td><td colspan="9" class="muted">${item.loadError ? 'Error de carga' : 'Historial insuficiente para backtest'}</td>`;
         } else {
           const o = bt.oos;
           const oosTxt = o ? `<span class="${o.acc > o.accBase ? 'val-up' : 'val-down'}">${pct(o.acc)}</span> vs ${pct(o.accBase)}` : '—';
@@ -2039,12 +2126,24 @@
             <td class="mono">${skillTxt}</td>
             <td class="mono">${tpTxt(bt.tp[1])}</td>
             <td class="mono">${tpTxt(bt.tp[-1])}</td>
-            <td class="mono">${strongTxt}</td>`;
+            <td class="mono">${strongTxt}</td>
+            <td class="mono">${rsiCompare(item)}</td>`;
           tr.onclick = () => { btSelected = item.symbol; renderBacktestModal(); };
         }
         tbody.appendChild(tr);
       });
       drawCalibration(btSelected ? state[btSelected] : null);
+    }
+
+    function rsiCompare(item) {
+      if (!item.btBy) return '—';
+      return RSI_PERIODS.map(p => {
+        const b = item.btBy[p];
+        const sk = b && b.oos ? b.oos.skill : null;
+        const txt = sk == null ? '—' : `${sk >= 0 ? '+' : ''}${(sk * 100).toFixed(1)}%`;
+        const cls = sk == null ? '' : sk > 0 ? 'val-up' : 'val-down';
+        return `${p}: <span class="${cls}">${txt}</span>${item.rsiP === p ? ' ✓' : ''}`;
+      }).join(' · ');
     }
 
     function drawCalibration(item) {
@@ -2284,7 +2383,8 @@
       ctx.fillRect(0, rsiTop, plotW, rsiH);
       const getYR = v => (rsiTop + rsiH) - (v / 100) * rsiH;
       ctx.strokeStyle = 'rgba(132, 142, 156, 0.3)'; ctx.lineWidth = 1; ctx.setLineDash([2, 2]);
-      [70, 30].forEach(v => { ctx.beginPath(); ctx.moveTo(0, getYR(v)); ctx.lineTo(plotW, getYR(v)); ctx.stroke(); });
+      const bands = rsiBands(item.rsiP);
+      bands.forEach(v => { ctx.beginPath(); ctx.moveTo(0, getYR(v)); ctx.lineTo(plotW, getYR(v)); ctx.stroke(); });
       ctx.setLineDash([]);
       const rsiAt = i => (ser && ser.rsi[start + i] != null) ? ser.rsi[start + i] : null;
       ctx.strokeStyle = '#f0b90b'; ctx.lineWidth = 1.5;
@@ -2298,8 +2398,8 @@
       });
       if (started) ctx.stroke();
       ctx.fillStyle = '#5e6673'; ctx.textAlign = 'left';
-      ctx.fillText('RSI 14', 4 * dpr, rsiTop + 11 * dpr);
-      [70, 30].forEach(v => ctx.fillText(String(v), plotW + 6 * dpr, getYR(v) + 3 * dpr));
+      ctx.fillText(`RSI ${item.rsiP}`, 4 * dpr, rsiTop + 11 * dpr);
+      bands.forEach(v => ctx.fillText(String(v), plotW + 6 * dpr, getYR(v) + 3 * dpr));
       const rLast = rsiAt(kl.length - 1);
       if (rLast != null) {
         const yy = clamp(getYR(rLast), rsiTop + 8 * dpr, rsiTop + rsiH - 8 * dpr);
