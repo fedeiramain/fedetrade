@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Screener & Portafolio Cripto Binance con Import/Export JSON</title>
+  <title>Screener & Portafolio Cripto Binance Tick-a-Tick</title>
   <style>
     :root {
       --bg-main: #0b0e11;
@@ -18,6 +18,8 @@
       --accent-red-bg: rgba(246, 70, 93, 0.12);
       --accent-yellow: #f0b90b;
       --accent-blue: #3861fb;
+      --accent-cyan: #00bcd4;
+      --accent-purple: #9c27b0;
       --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
     }
 
@@ -64,7 +66,6 @@
     }
     .btn:hover { background: var(--bg-card-hover); border-color: var(--text-muted); }
     .btn-primary { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
-    .btn-primary:hover { opacity: 0.9; }
 
     .status-badge {
       display: inline-flex;
@@ -78,128 +79,12 @@
     }
 
     .status-dot {
-      width: 8px;
-      height: 8px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       background-color: var(--accent-yellow);
       display: inline-block;
     }
     .status-dot.connected { background-color: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
-
-    .modal-overlay {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.75);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-      visibility: hidden;
-      opacity: 0;
-      transition: all 0.25s ease;
-    }
-    .modal-overlay.active { visibility: visible; opacity: 1; }
-
-    .modal {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      width: 90%;
-      max-width: 750px;
-      max-height: 85vh;
-      display: flex;
-      flex-direction: column;
-      padding: 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-    .modal-header h2 { font-size: 1.1rem; color: #fff; }
-
-    .search-box-container {
-      position: relative;
-      margin-bottom: 16px;
-    }
-
-    .search-input {
-      width: 100%;
-      background: var(--bg-main);
-      border: 1px solid var(--border-color);
-      color: #fff;
-      padding: 10px 14px;
-      border-radius: 6px;
-      font-size: 0.9rem;
-      outline: none;
-    }
-    .search-input:focus { border-color: var(--accent-blue); }
-
-    .search-results {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      background: #111317;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      max-height: 200px;
-      overflow-y: auto;
-      z-index: 10;
-      display: none;
-    }
-    .search-results.active { display: block; }
-    .search-item {
-      padding: 8px 12px;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      border-bottom: 1px solid #1a1d24;
-    }
-    .search-item:hover { background: var(--bg-card-hover); }
-
-    .portfolio-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      max-height: 220px;
-      overflow-y: auto;
-      padding: 8px;
-      background: var(--bg-main);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      margin-bottom: 16px;
-    }
-
-    .chip {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      padding: 4px 10px;
-      border-radius: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 600;
-    }
-    .chip-remove {
-      color: var(--accent-red);
-      cursor: pointer;
-      font-weight: 700;
-    }
-
-    .json-tools {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      background: rgba(0,0,0,0.25);
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px dashed var(--border-color);
-      margin-bottom: 16px;
-    }
 
     .controls-bar {
       background: var(--bg-card);
@@ -225,9 +110,46 @@
       font-size: 0.85rem;
     }
 
+    .tf-btn-group {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-main);
+      padding: 3px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .tf-btn {
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tf-btn.active {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+
+    .timer-badge {
+      background: rgba(240, 185, 11, 0.15);
+      color: var(--accent-yellow);
+      border: 1px solid rgba(240, 185, 11, 0.3);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+    }
+
     .dashboard-grid {
       display: grid;
-      grid-template-columns: 1fr 340px;
+      grid-template-columns: 1fr 360px;
       gap: 16px;
     }
 
@@ -244,6 +166,7 @@
       padding: 12px;
       display: flex;
       flex-direction: column;
+      position: relative;
     }
 
     .card-header {
@@ -256,23 +179,7 @@
     .symbol-name { font-size: 1.1rem; font-weight: 700; color: #fff; }
     .symbol-price { font-size: 1.1rem; font-family: var(--font-mono); font-weight: 600; }
 
-    .projection-box {
-      background: rgba(0, 0, 0, 0.25);
-      border-radius: 6px;
-      padding: 8px;
-      margin-bottom: 10px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    .proj-item { display: flex; flex-direction: column; }
-    .proj-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; }
-    .proj-val { font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem; }
-    .proj-val.bull { color: var(--accent-green); }
-    .proj-val.bear { color: var(--accent-red); }
-
-    .prob-bar-container { margin-bottom: 10px; }
+    .prob-bar-container { margin-bottom: 8px; }
     .prob-labels {
       display: flex;
       justify-content: space-between;
@@ -294,11 +201,50 @@
       transition: width 0.3s ease;
     }
 
+    .tp-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 6px;
+      padding: 6px;
+      margin-bottom: 8px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      text-align: center;
+    }
+
+    .tp-item { display: flex; flex-direction: column; }
+    .tp-label { font-size: 0.65rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; }
+    .tp-val { font-family: var(--font-mono); font-weight: 700; font-size: 0.82rem; margin-top: 2px; }
+    .tp-val.bull { color: var(--accent-green); }
+    .tp-val.bear { color: var(--accent-red); }
+
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+      height: 280px;
+    }
+
     canvas {
       width: 100%;
-      height: 220px;
+      height: 100%;
       background: #111317;
       border-radius: 4px;
+      cursor: crosshair;
+    }
+
+    .chart-tooltip {
+      position: absolute;
+      top: 6px; left: 6px;
+      background: rgba(11, 14, 17, 0.85);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      pointer-events: none;
+      display: none;
+      z-index: 5;
     }
 
     .table-container {
@@ -327,6 +273,61 @@
     .badge-bull { background: var(--accent-green-bg); color: var(--accent-green); }
     .badge-bear { background: var(--accent-red-bg); color: var(--accent-red); }
 
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 1000; visibility: hidden; opacity: 0; transition: all 0.25s ease;
+    }
+    .modal-overlay.active { visibility: visible; opacity: 1; }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      width: 90%; max-width: 750px; max-height: 85vh;
+      display: flex; flex-direction: column; padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .modal-header h2 { font-size: 1.1rem; color: #fff; }
+
+    .search-box-container { position: relative; margin-bottom: 16px; }
+
+    .search-input {
+      width: 100%; background: var(--bg-main); border: 1px solid var(--border-color);
+      color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 0.9rem; outline: none;
+    }
+    .search-input:focus { border-color: var(--accent-blue); }
+
+    .search-results {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: #111317; border: 1px solid var(--border-color);
+      border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 10; display: none;
+    }
+    .search-results.active { display: block; }
+    .search-item { padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; border-bottom: 1px solid #1a1d24; }
+    .search-item:hover { background: var(--bg-card-hover); }
+
+    .portfolio-chips {
+      display: flex; flex-wrap: wrap; gap: 8px; max-height: 200px;
+      overflow-y: auto; padding: 8px; background: var(--bg-main);
+      border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 16px;
+    }
+
+    .chip {
+      background: var(--bg-card); border: 1px solid var(--border-color);
+      padding: 4px 10px; border-radius: 16px; display: flex; align-items: center; gap: 8px; font-weight: 600;
+    }
+    .chip-remove { color: var(--accent-red); cursor: pointer; font-weight: 700; }
+
+    .json-tools {
+      display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,0.25);
+      padding: 10px; border-radius: 6px; border: 1px dashed var(--border-color); margin-bottom: 16px;
+    }
+
     @media (max-width: 1200px) {
       .dashboard-grid { grid-template-columns: 1fr; }
       .charts-container { grid-template-columns: 1fr; }
@@ -338,10 +339,11 @@
 
   <header>
     <div class="title-area">
-      <h1>Portafolio Cripto de FEDE</h1>
-      <p>Análisis en directo con respaldo y carga rápida vía</p>
+      <h1>Screener & Gráficos Cripto Binance</h1>
+      <p>Actualización en vivo tick-a-tick | Rotación de ordenamiento cada 30s</p>
     </div>
     <div class="header-actions">
+      <div id="refresh-timer" class="timer-badge">Rotación en: 30s</div>
       <button class="btn btn-primary" onclick="openModal()">⚙ Mi Portafolio (<span id="selected-count">0</span>)</button>
       <div class="status-badge">
         <span id="status-dot" class="status-dot"></span>
@@ -352,33 +354,52 @@
 
   <div class="controls-bar">
     <div class="controls-group">
-      <label for="filter-mode">Filtrar Gráficos por Tendencia:</label>
-      <select id="filter-mode" onchange="updateUI()">
-        <option value="abs">Mayor Fuerza Absoluta (Mejores Alcistas o Bajistas)</option>
-        <option value="bull">Solo Mayor Probabilidad Alcista</option>
-        <option value="bear">Solo Mayor Probabilidad Bajista</option>
+      <label>Rotación de Tarjetas:</label>
+      <select id="refresh-rate" onchange="changeRefreshInterval(this.value)">
+        <option value="15">Cada 15 Segundos</option>
+        <option value="30" selected>Cada 30 Segundos</option>
+        <option value="60">Cada 60 Segundos</option>
       </select>
     </div>
 
     <div class="controls-group">
-      <label for="display-limit">Cantidad de Gráficos Visibles:</label>
-      <select id="display-limit" onchange="updateUI()">
-        <option value="4">Top 4 Monedas</option>
-        <option value="6">Top 6 Monedas</option>
-        <option value="10" selected>Top 10 Monedas</option>
-        <option value="16">Top 16 Monedas</option>
+      <label>Velas:</label>
+      <div class="tf-btn-group">
+        <button class="tf-btn active" id="tf-15m" onclick="changeTimeframe('15m')">15 Min</button>
+        <button class="tf-btn" id="tf-1h" onclick="changeTimeframe('1h')">1 Hora</button>
+        <button class="tf-btn" id="tf-1d" onclick="changeTimeframe('1d')">1 Día</button>
+      </div>
+    </div>
+
+    <div class="controls-group">
+      <label for="filter-mode">Filtrar por Tendencia:</label>
+      <select id="filter-mode" onchange="reorderAndRenderGrid()">
+        <option value="abs">Mayor Fuerza Absoluta</option>
+        <option value="random">Itinerancia / Selección Aleatoria</option>
+        <option value="bull">Solo Alcistas</option>
+        <option value="bear">Solo Bajistas</option>
+      </select>
+    </div>
+
+    <div class="controls-group">
+      <label for="display-limit">Gráficos:</label>
+      <select id="display-limit" onchange="reorderAndRenderGrid()">
+        <option value="4">Top 4</option>
+        <option value="6">Top 6</option>
+        <option value="10" selected>Top 10</option>
+        <option value="16">Top 16</option>
       </select>
     </div>
   </div>
 
   <div class="dashboard-grid">
     <div>
-      <h2 style="font-size: 1rem; margin-bottom: 12px;">Las Mejores Tendencias de tu Portafolio</h2>
+      <h2 style="font-size: 1rem; margin-bottom: 12px;" id="grid-title">Gráficos en Temporalidad: 15 Minutos</h2>
       <div id="charts-grid" class="charts-container"></div>
     </div>
 
     <div class="table-container">
-      <h2 style="font-size: 1rem; margin-bottom: 12px;">Ranking General</h2>
+      <h2 style="font-size: 1rem; margin-bottom: 12px;">Resumen del Portafolio (En vivo)</h2>
       <table>
         <thead>
           <tr>
@@ -386,7 +407,7 @@
             <th>Par</th>
             <th>Precio</th>
             <th>Prob. Alcista</th>
-            <th>Obj. Máx</th>
+            <th>TP1 Probable</th>
           </tr>
         </thead>
         <tbody id="table-body"></tbody>
@@ -394,7 +415,7 @@
     </div>
   </div>
 
-  <!-- Modal de Portafolio + Herramientas JSON -->
+  <!-- Modal de Portafolio -->
   <div id="modal-overlay" class="modal-overlay">
     <div class="modal">
       <div class="modal-header">
@@ -410,7 +431,6 @@
       <p style="margin-bottom: 6px; color: var(--text-muted); font-size: 0.8rem;">Monedas actuales en el portafolio:</p>
       <div id="portfolio-chips" class="portfolio-chips"></div>
 
-      <!-- Módulo JSON Importar y Exportar -->
       <div class="json-tools">
         <span style="font-weight: 600; color: var(--accent-yellow);">Archivos JSON:</span>
         <button class="btn" onclick="exportJSON()">📥 Exportar JSON</button>
@@ -428,28 +448,66 @@
   <script>
     const DEFAULT_PORTFOLIO = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","AVAXUSDT","DOTUSDT","LINKUSDT","NEARUSDT","SUIUSDT","PEPEUSDT","FETUSDT","RENDERUSDT"];
     
+    let currentTimeframe = '15m';
+    let refreshIntervalSeconds = 30;
+    let countdownSeconds = 30;
     let allBinanceSymbols = [];
     let userPortfolio = new Set();
     let state = {};
+    let activeGridSymbols = [];
     let ws = null;
     let depthInterval = null;
+    let timerInterval = null;
 
     async function init() {
       loadSavedPortfolio();
       await fetchAllBinanceSymbols();
       renderPortfolioChips();
       startAnalysis();
-      setInterval(updateUI, 1000);
+      startCountdownTimer();
+    }
+
+    function changeRefreshInterval(val) {
+      refreshIntervalSeconds = parseInt(val);
+      countdownSeconds = refreshIntervalSeconds;
+      updateTimerBadge();
+    }
+
+    function startCountdownTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        countdownSeconds--;
+        if (countdownSeconds <= 0) {
+          reorderAndRenderGrid();
+          countdownSeconds = refreshIntervalSeconds;
+        }
+        updateTimerBadge();
+      }, 1000);
+    }
+
+    function updateTimerBadge() {
+      const el = document.getElementById('refresh-timer');
+      if (el) el.innerText = `Rotación en: ${countdownSeconds}s`;
+    }
+
+    function changeTimeframe(tf) {
+      if (currentTimeframe === tf) return;
+      currentTimeframe = tf;
+
+      document.querySelectorAll('.tf-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`tf-${tf}`).classList.add('active');
+
+      const labels = { '15m': '15 Minutos', '1h': '1 Hora', '1d': '1 Día' };
+      document.getElementById('grid-title').innerText = `Gráficos en Temporalidad: ${labels[tf]}`;
+
+      startAnalysis();
     }
 
     function loadSavedPortfolio() {
       const saved = localStorage.getItem('crypto_user_portfolio');
       if (saved) {
-        try {
-          userPortfolio = new Set(JSON.parse(saved));
-        } catch(e) {
-          userPortfolio = new Set(DEFAULT_PORTFOLIO);
-        }
+        try { userPortfolio = new Set(JSON.parse(saved)); }
+        catch(e) { userPortfolio = new Set(DEFAULT_PORTFOLIO); }
       } else {
         userPortfolio = new Set(DEFAULT_PORTFOLIO);
       }
@@ -461,13 +519,10 @@
       document.getElementById('selected-count').innerText = userPortfolio.size;
     }
 
-    // Funciones JSON para Importación / Exportación
     function exportJSON() {
-      const portfolioArray = Array.from(userPortfolio);
-      const dataStr = JSON.stringify(portfolioArray, null, 2);
+      const dataStr = JSON.stringify(Array.from(userPortfolio), null, 2);
       const blob = new Blob([dataStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);
-      
       const a = document.createElement('a');
       a.href = url;
       a.download = `portafolio_cripto_${new Date().toISOString().slice(0,10)}.json`;
@@ -487,16 +542,16 @@
             userPortfolio = new Set(importedArr.map(s => s.toUpperCase()));
             savePortfolio();
             renderPortfolioChips();
-            alert("¡Portafolio importado exitosamente desde JSON!");
+            alert("¡Portafolio cargado con éxito!");
           } else {
-            alert("Error: El archivo JSON debe contener una lista válida de pares (ej: [\"BTCUSDT\", \"SOLUSDT\"]).");
+            alert("Error: Formato JSON no válido.");
           }
         } catch (err) {
           alert("Error al leer el archivo JSON.");
         }
       };
       reader.readAsText(file);
-      event.target.value = ''; // Limpiar input para permitir re-importar el mismo archivo
+      event.target.value = '';
     }
 
     async function fetchAllBinanceSymbols() {
@@ -507,32 +562,27 @@
           .filter(s => s.quoteAsset === 'USDT' && s.status === 'TRADING')
           .map(s => s.symbol);
       } catch (e) {
-        console.error("Error al obtener símbolos:", e);
+        console.error("Error al conectar con Binance API:", e);
       }
     }
 
     function handleSearch(query) {
       const resultsContainer = document.getElementById('search-results');
       const q = query.trim().toUpperCase();
-      
-      if (!q) {
-        resultsContainer.classList.remove('active');
-        return;
-      }
+      if (!q) { resultsContainer.classList.remove('active'); return; }
 
       const matches = allBinanceSymbols.filter(s => s.includes(q)).slice(0, 10);
-      if (matches.length === 0) {
-        resultsContainer.classList.remove('active');
-        return;
-      }
+      if (matches.length === 0) { resultsContainer.classList.remove('active'); return; }
 
       resultsContainer.innerHTML = '';
       matches.forEach(sym => {
         const div = document.createElement('div');
         div.className = 'search-item';
-        div.innerHTML = `<span><strong>${sym}</strong></span> <span>${userPortfolio.has(sym) ? '✔ En portafolio' : '+ Agregar'}</span>`;
+        div.innerHTML = `<span><strong>${sym}</strong></span> <span>${userPortfolio.has(sym) ? '✔ En lista' : '+ Agregar'}</span>`;
         div.onclick = () => {
-          addToPortfolio(sym);
+          userPortfolio.add(sym);
+          savePortfolio();
+          renderPortfolioChips();
           document.getElementById('search-input').value = '';
           resultsContainer.classList.remove('active');
         };
@@ -541,33 +591,21 @@
       resultsContainer.classList.add('active');
     }
 
-    function addToPortfolio(sym) {
-      userPortfolio.add(sym);
-      savePortfolio();
-      renderPortfolioChips();
-    }
-
-    function removeFromPortfolio(sym) {
-      userPortfolio.delete(sym);
-      savePortfolio();
-      renderPortfolioChips();
-    }
-
-    function resetDefaultPortfolio() {
-      userPortfolio = new Set(DEFAULT_PORTFOLIO);
-      savePortfolio();
-      renderPortfolioChips();
-    }
-
     function renderPortfolioChips() {
       const container = document.getElementById('portfolio-chips');
       container.innerHTML = '';
       userPortfolio.forEach(sym => {
         const chip = document.createElement('div');
         chip.className = 'chip';
-        chip.innerHTML = `<span>${sym}</span> <span class="chip-remove" onclick="removeFromPortfolio('${sym}')">✕</span>`;
+        chip.innerHTML = `<span>${sym}</span> <span class="chip-remove" onclick="userPortfolio.delete('${sym}'); savePortfolio(); renderPortfolioChips();">✕</span>`;
         container.appendChild(chip);
       });
+    }
+
+    function resetDefaultPortfolio() {
+      userPortfolio = new Set(DEFAULT_PORTFOLIO);
+      savePortfolio();
+      renderPortfolioChips();
     }
 
     function openModal() { document.getElementById('modal-overlay').classList.add('active'); }
@@ -587,7 +625,6 @@
 
       state = {};
       const activeList = Array.from(userPortfolio);
-      
       if (activeList.length === 0) {
         document.getElementById('status-text').innerText = "Portafolio vacío";
         document.getElementById('charts-grid').innerHTML = '';
@@ -599,84 +636,108 @@
         state[sym] = {
           symbol: sym,
           klines: [],
+          dailyKlines: [],
           price: 0,
+          rsiSeries: [],
           rsi: 50,
           macd: 0,
-          signal: 0,
           hist: 0,
           obi: 0,
           probBull: 50,
-          targetHigh: 0,
-          targetLow: 0,
+          intraSR: { support: 0, resistance: 0 },
+          weeklySR: { support: 0, resistance: 0 },
+          askWall: 0,
+          bidWall: 0,
+          tp1: 0, tp2: 0, tp3: 0,
           score: 50
         };
       });
 
       await fetchHistories(activeList);
+      renderTableStructure(); // Inicializa la estructura de la tabla
       connectWebSocket(activeList);
       startDepthPolling(activeList);
+      reorderAndRenderGrid();
     }
 
     async function fetchHistories(activeList) {
-      document.getElementById('status-text').innerText = "Cargando datos...";
+      document.getElementById('status-text').innerText = `Cargando datos (${currentTimeframe})...`;
       const promises = activeList.map(async sym => {
         try {
-          const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=15m&limit=60`);
-          const data = await res.json();
-          state[sym].klines = data.map(d => ({
-            time: d[0],
-            open: parseFloat(d[1]),
-            high: parseFloat(d[2]),
-            low: parseFloat(d[3]),
-            close: parseFloat(d[4]),
-            volume: parseFloat(d[5])
+          const resTF = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${currentTimeframe}&limit=60`);
+          const dataTF = await resTF.json();
+          state[sym].klines = dataTF.map(d => ({
+            time: d[0], open: parseFloat(d[1]), high: parseFloat(d[2]), low: parseFloat(d[3]), close: parseFloat(d[4]), volume: parseFloat(d[5])
           }));
+
+          const res1d = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=1d&limit=30`);
+          const data1d = await res1d.json();
+          state[sym].dailyKlines = data1d.map(d => ({
+            high: parseFloat(d[2]), low: parseFloat(d[3]), close: parseFloat(d[4])
+          }));
+
           if (state[sym].klines.length > 0) {
             state[sym].price = state[sym].klines[state[sym].klines.length - 1].close;
           }
           calculateIndicators(sym);
-        } catch (e) {
-          console.error("Error klines:", sym, e);
-        }
+        } catch (e) { console.error("Error klines:", sym, e); }
       });
       await Promise.all(promises);
-      document.getElementById('status-text').innerText = "Datos cargados";
+      document.getElementById('status-text').innerText = `Datos cargados (${currentTimeframe})`;
     }
 
     function calculateIndicators(sym) {
-      const klines = state[sym].klines;
+      const item = state[sym];
+      const klines = item.klines;
       if (!klines || klines.length < 30) return;
 
       const closes = klines.map(k => k.close);
       
       // RSI (14)
+      item.rsiSeries = [];
       let gains = 0, losses = 0;
-      for (let i = closes.length - 14; i < closes.length; i++) {
+      for (let i = 1; i < closes.length; i++) {
         const diff = closes[i] - closes[i - 1];
-        if (diff >= 0) gains += diff;
-        else losses -= diff;
+        if (i <= 14) {
+          if (diff >= 0) gains += diff; else losses -= diff;
+          if (i === 14) {
+            let avgG = gains / 14, avgL = losses / 14;
+            let rs = avgL === 0 ? 100 : avgG / avgL;
+            item.rsiSeries.push(100 - (100 / (1 + rs)));
+          }
+        } else {
+          let g = diff >= 0 ? diff : 0;
+          let l = diff < 0 ? -diff : 0;
+          gains = (gains * 13 + g) / 14;
+          losses = (losses * 13 + l) / 14;
+          let rs = losses === 0 ? 100 : gains / losses;
+          item.rsiSeries.push(100 - (100 / (1 + rs)));
+        }
       }
-      const avgGain = gains / 14;
-      const avgLoss = losses / 14;
-      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-      state[sym].rsi = 100 - (100 / (1 + rs));
+      item.rsi = item.rsiSeries[item.rsiSeries.length - 1] || 50;
 
-      // MACD (12, 26, 9)
+      // MACD
       const ema12 = calcEMA(closes, 12);
       const ema26 = calcEMA(closes, 26);
-      const macdLine = ema12[ema12.length - 1] - ema26[ema26.length - 1];
-      
-      const macdHistory = [];
-      for(let i = 0; i < ema12.length; i++) {
-        macdHistory.push(ema12[i] - ema26[i]);
-      }
-      const signalLine = calcEMA(macdHistory, 9).pop();
-      
-      state[sym].macd = macdLine;
-      state[sym].signal = signalLine;
-      state[sym].hist = macdLine - signalLine;
+      item.macd = ema12[ema12.length - 1] - ema26[ema26.length - 1];
+      const macdHist = ema12.map((val, i) => val - ema26[i]);
+      const signal = calcEMA(macdHist, 9).pop();
+      item.hist = item.macd - signal;
 
-      calculateProbabilityAndTargets(sym);
+      // S/R Dinámicos
+      const highs = klines.map(k => k.high);
+      const lows = klines.map(k => k.low);
+      item.intraSR.resistance = Math.max(...highs.slice(-20));
+      item.intraSR.support = Math.min(...lows.slice(-20));
+
+      if (item.dailyKlines.length > 0) {
+        const highs1d = item.dailyKlines.map(k => k.high);
+        const lows1d = item.dailyKlines.map(k => k.low);
+        item.weeklySR.resistance = Math.max(...highs1d.slice(-7));
+        item.weeklySR.support = Math.min(...lows1d.slice(-7));
+      }
+
+      calculateProbabilityAndTPs(sym);
     }
 
     function calcEMA(data, period) {
@@ -688,44 +749,48 @@
       return emaArr;
     }
 
-    function calculateProbabilityAndTargets(sym) {
+    function calculateProbabilityAndTPs(sym) {
       const item = state[sym];
       
       let techScore = 50;
-      if (item.rsi > 50) techScore += (item.rsi - 50) * 0.6;
-      else techScore -= (50 - item.rsi) * 0.6;
-
-      if (item.hist > 0) techScore += 15;
-      else techScore -= 15;
+      if (item.rsi > 50) techScore += (item.rsi - 50) * 0.6; else techScore -= (50 - item.rsi) * 0.6;
+      if (item.hist > 0) techScore += 15; else techScore -= 15;
 
       let obiScore = item.obi * 30;
-      let finalProb = techScore + obiScore;
-      finalProb = Math.max(5, Math.min(95, finalProb));
+      let finalProb = Math.max(5, Math.min(95, techScore + obiScore));
       
       item.probBull = finalProb;
       item.score = finalProb;
 
-      const klines = item.klines;
-      if (!klines || klines.length === 0) return;
-
       let atr = 0;
+      const klines = item.klines;
       for (let i = klines.length - 14; i < klines.length; i++) {
         atr += (klines[i].high - klines[i].low);
       }
       atr = atr / 14;
 
-      const probFactor = (item.probBull / 100);
-      item.targetHigh = item.price + (atr * (1 + probFactor));
-      item.targetLow = item.price - (atr * (2 - probFactor));
+      const isBull = item.probBull >= 50;
+
+      if (isBull) {
+        item.tp1 = item.askWall > item.price ? item.askWall : Math.min(item.intraSR.resistance, item.price + atr * 1.5);
+        if (item.tp1 <= item.price) item.tp1 = item.price + atr * 1.2;
+        item.tp2 = Math.max(item.tp1 * 1.01, item.weeklySR.resistance);
+        item.tp3 = item.tp2 + (atr * 2.5);
+      } else {
+        item.tp1 = item.bidWall < item.price ? item.bidWall : Math.max(item.intraSR.support, item.price - atr * 1.5);
+        if (item.tp1 >= item.price) item.tp1 = item.price - atr * 1.2;
+        item.tp2 = Math.min(item.tp1 * 0.99, item.weeklySR.support);
+        item.tp3 = item.tp2 - (atr * 2.5);
+      }
     }
 
     function connectWebSocket(activeList) {
-      const streams = activeList.map(s => `${s.toLowerCase()}@kline_15m`).join('/');
+      const streams = activeList.map(s => `${s.toLowerCase()}@kline_${currentTimeframe}`).join('/');
       ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
 
       ws.onopen = () => {
         document.getElementById('status-dot').classList.add('connected');
-        document.getElementById('status-text').innerText = "En vivo (WebSockets)";
+        document.getElementById('status-text').innerText = `En vivo (${currentTimeframe})`;
       };
 
       ws.onmessage = (event) => {
@@ -737,12 +802,7 @@
         if (!state[sym]) return;
 
         const candle = {
-          time: k.t,
-          open: parseFloat(k.o),
-          high: parseFloat(k.h),
-          low: parseFloat(k.l),
-          close: parseFloat(k.c),
-          volume: parseFloat(k.v)
+          time: k.t, open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l), close: parseFloat(k.c), volume: parseFloat(k.v)
         };
 
         state[sym].price = candle.close;
@@ -755,11 +815,17 @@
         }
 
         calculateIndicators(sym);
+
+        // ACTUALIZACIÓN TICK-A-TICK DE LA TABLA LATERAL
+        updateTableRow(sym);
+
+        // ACTUALIZACIÓN TICK-A-TICK DEL GRÁFICO (Si está visible)
+        if (activeGridSymbols.includes(sym)) {
+          updateSingleCard(sym);
+        }
       };
 
-      ws.onclose = () => {
-        document.getElementById('status-dot').classList.remove('connected');
-      };
+      ws.onclose = () => { document.getElementById('status-dot').classList.remove('connected'); };
     }
 
     function startDepthPolling(activeList) {
@@ -769,19 +835,35 @@
             const res = await fetch(`https://api.binance.com/api/v3/depth?symbol=${sym}&limit=20`);
             const depth = await res.json();
             
-            let bidVol = depth.bids.reduce((acc, b) => acc + parseFloat(b[1]), 0);
-            let askVol = depth.asks.reduce((acc, a) => acc + parseFloat(a[1]), 0);
-            
+            let bidVol = 0, askVol = 0;
+            let maxBid = 0, maxAsk = 0;
+            let bestBidPrice = state[sym].price, bestAskPrice = state[sym].price;
+
+            depth.bids.forEach(b => {
+              const v = parseFloat(b[1]);
+              bidVol += v;
+              if (v > maxBid) { maxBid = v; bestBidPrice = parseFloat(b[0]); }
+            });
+
+            depth.asks.forEach(a => {
+              const v = parseFloat(a[1]);
+              askVol += v;
+              if (v > maxAsk) { maxAsk = v; bestAskPrice = parseFloat(a[0]); }
+            });
+
             if (state[sym]) {
               state[sym].obi = (bidVol - askVol) / (bidVol + askVol || 1);
-              calculateProbabilityAndTargets(sym);
+              state[sym].bidWall = bestBidPrice;
+              state[sym].askWall = bestAskPrice;
+              calculateProbabilityAndTPs(sym);
+              updateTableRow(sym);
             }
           } catch(e){}
         }
       }, 5000);
     }
 
-    function updateUI() {
+    function reorderAndRenderGrid() {
       const allItems = Object.values(state);
       if (allItems.length === 0) return;
 
@@ -790,7 +872,9 @@
 
       let sorted = [...allItems];
 
-      if (mode === 'bull') {
+      if (mode === 'random') {
+        sorted.sort(() => Math.random() - 0.5);
+      } else if (mode === 'bull') {
         sorted.sort((a, b) => b.probBull - a.probBull);
       } else if (mode === 'bear') {
         sorted.sort((a, b) => a.probBull - b.probBull);
@@ -799,9 +883,9 @@
       }
 
       const topCharts = sorted.slice(0, limit);
+      activeGridSymbols = topCharts.map(item => item.symbol);
 
       renderChartsGrid(topCharts);
-      renderTable(allItems.sort((a, b) => b.probBull - a.probBull));
     }
 
     function renderChartsGrid(items) {
@@ -811,6 +895,7 @@
       items.forEach(item => {
         const card = document.createElement('div');
         card.className = 'card';
+        card.id = `card-${item.symbol}`;
 
         const isBull = item.probBull >= 50;
 
@@ -818,9 +903,9 @@
           <div class="card-header">
             <div>
               <div class="symbol-name">${item.symbol}</div>
-              <div class="symbol-price">${formatPrice(item.price)}</div>
+              <div class="symbol-price" id="price-${item.symbol}">${formatPrice(item.price)}</div>
             </div>
-            <span class="badge ${isBull ? 'badge-bull' : 'badge-bear'}">
+            <span class="badge ${isBull ? 'badge-bull' : 'badge-bear'}" id="badge-${item.symbol}">
               ${isBull ? 'ALCISTA' : 'BAJISTA'}
             </span>
           </div>
@@ -828,25 +913,32 @@
           <div class="prob-bar-container">
             <div class="prob-labels">
               <span>Prob. Alcista</span>
-              <span class="${isBull ? 'val-up' : 'val-down'}">${item.probBull.toFixed(1)}%</span>
+              <span class="${isBull ? 'val-up' : 'val-down'}" id="prob-val-${item.symbol}">${item.probBull.toFixed(1)}%</span>
             </div>
             <div class="prob-bar">
-              <div class="prob-fill" style="width: ${item.probBull}%;"></div>
+              <div class="prob-fill" id="prob-fill-${item.symbol}" style="width: ${item.probBull}%;"></div>
             </div>
           </div>
 
-          <div class="projection-box">
-            <div class="proj-item">
-              <span class="proj-label">Máx. Probable</span>
-              <span class="proj-val bull">${formatPrice(item.targetHigh)}</span>
+          <div class="tp-box">
+            <div class="tp-item">
+              <span class="tp-label">TP1</span>
+              <span class="tp-val ${isBull ? 'bull' : 'bear'}" id="tp1-${item.symbol}">${formatPrice(item.tp1)}</span>
             </div>
-            <div class="proj-item">
-              <span class="proj-label">Mín. Probable</span>
-              <span class="proj-val bear">${formatPrice(item.targetLow)}</span>
+            <div class="tp-item">
+              <span class="tp-label">TP2</span>
+              <span class="tp-val ${isBull ? 'bull' : 'bear'}" id="tp2-${item.symbol}">${formatPrice(item.tp2)}</span>
+            </div>
+            <div class="tp-item">
+              <span class="tp-label">TP3</span>
+              <span class="tp-val ${isBull ? 'bull' : 'bear'}" id="tp3-${item.symbol}">${formatPrice(item.tp3)}</span>
             </div>
           </div>
 
-          <canvas id="canvas-${item.symbol}"></canvas>
+          <div class="canvas-wrapper">
+            <canvas id="canvas-${item.symbol}"></canvas>
+            <div id="tooltip-${item.symbol}" class="chart-tooltip"></div>
+          </div>
         `;
 
         container.appendChild(card);
@@ -854,82 +946,225 @@
       });
     }
 
+    function updateSingleCard(sym) {
+      const item = state[sym];
+      if (!item) return;
+
+      const priceEl = document.getElementById(`price-${sym}`);
+      if (priceEl) priceEl.innerText = formatPrice(item.price);
+
+      const probValEl = document.getElementById(`prob-val-${sym}`);
+      if (probValEl) probValEl.innerText = `${item.probBull.toFixed(1)}%`;
+
+      const probFillEl = document.getElementById(`prob-fill-${sym}`);
+      if (probFillEl) probFillEl.style.width = `${item.probBull}%`;
+
+      const tp1El = document.getElementById(`tp1-${sym}`);
+      if (tp1El) tp1El.innerText = formatPrice(item.tp1);
+
+      const tp2El = document.getElementById(`tp2-${sym}`);
+      if (tp2El) tp2El.innerText = formatPrice(item.tp2);
+
+      const tp3El = document.getElementById(`tp3-${sym}`);
+      if (tp3El) tp3El.innerText = formatPrice(item.tp3);
+
+      drawCanvasChart(`canvas-${sym}`, item);
+    }
+
+    // Renderiza la estructura inicial fija de la tabla
+    function renderTableStructure() {
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+
+      const items = Object.values(state);
+      items.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.id = `row-${item.symbol}`;
+        const isBull = item.probBull >= 50;
+
+        tr.innerHTML = `
+          <td class="rank-num">${index + 1}</td>
+          <td style="font-weight:700;">${item.symbol}</td>
+          <td style="font-family:var(--font-mono);" id="tbl-price-${item.symbol}">${formatPrice(item.price)}</td>
+          <td style="font-weight:700;" class="${isBull ? 'val-up' : 'val-down'}" id="tbl-prob-${item.symbol}">${item.probBull.toFixed(1)}%</td>
+          <td style="font-family:var(--font-mono);" class="${isBull ? 'val-up' : 'val-down'}" id="tbl-tp1-${item.symbol}">${formatPrice(item.tp1)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Actualiza la fila específica de la tabla EN TIEMPO REAL CON CADA TICK
+    function updateTableRow(sym) {
+      const item = state[sym];
+      if (!item) return;
+
+      const isBull = item.probBull >= 50;
+
+      const priceEl = document.getElementById(`tbl-price-${sym}`);
+      if (priceEl) priceEl.innerText = formatPrice(item.price);
+
+      const probEl = document.getElementById(`tbl-prob-${sym}`);
+      if (probEl) {
+        probEl.innerText = `${item.probBull.toFixed(1)}%`;
+        probEl.className = isBull ? 'val-up' : 'val-down';
+      }
+
+      const tp1El = document.getElementById(`tbl-tp1-${sym}`);
+      if (tp1El) {
+        tp1El.innerText = formatPrice(item.tp1);
+        tp1El.className = isBull ? 'val-up' : 'val-down';
+      }
+    }
+
+    function formatDateForTF(timestamp, tf) {
+      const d = new Date(timestamp);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const mins = String(d.getMinutes()).padStart(2, '0');
+
+      if (tf === '15m') return `${hours}:${mins}`;
+      if (tf === '1h') return `${day}/${month} ${hours}h`;
+      return `${day}/${month}`;
+    }
+
     function drawCanvasChart(canvasId, item) {
       const canvas = document.getElementById(canvasId);
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
+      const tooltip = document.getElementById(`tooltip-${item.symbol}`);
       
       const width = canvas.width = canvas.clientWidth * window.devicePixelRatio;
       const height = canvas.height = canvas.clientHeight * window.devicePixelRatio;
 
       ctx.clearRect(0, 0, width, height);
 
-      const klines = item.klines.slice(-30);
+      const klines = item.klines.slice(-35);
       if (klines.length === 0) return;
 
+      const priceHeight = height * 0.65;
+      const rsiTop = height * 0.68;
+      const rsiHeight = height * 0.20;
+      const timeAxisTop = height * 0.88;
+
       const prices = klines.flatMap(k => [k.high, k.low]);
-      prices.push(item.targetHigh, item.targetLow);
+      prices.push(item.tp1, item.tp2, item.intraSR.resistance, item.intraSR.support);
       
       const minP = Math.min(...prices);
       const maxP = Math.max(...prices);
-      const range = (maxP - minP) || 1;
+      const rangeP = (maxP - minP) || 1;
 
-      const getY = (price) => height - ((price - minP) / range) * (height - 30) - 15;
+      const getYP = (price) => priceHeight - ((price - minP) / rangeP) * (priceHeight - 20) - 10;
       const candleWidth = width / klines.length;
 
+      // Grid
+      ctx.strokeStyle = '#1e2329';
+      ctx.lineWidth = 1;
+      for (let step = 0; step <= 4; step++) {
+        const gridY = (priceHeight / 4) * step;
+        ctx.beginPath(); ctx.moveTo(0, gridY); ctx.lineTo(width, gridY); ctx.stroke();
+      }
+
+      // S/R Intradía y Semanal
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = '#00bcd4';
+      ctx.beginPath(); ctx.moveTo(0, getYP(item.intraSR.resistance)); ctx.lineTo(width, getYP(item.intraSR.resistance)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, getYP(item.intraSR.support)); ctx.lineTo(width, getYP(item.intraSR.support)); ctx.stroke();
+
+      ctx.strokeStyle = '#9c27b0'; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(0, getYP(item.weeklySR.resistance)); ctx.lineTo(width, getYP(item.weeklySR.resistance)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, getYP(item.weeklySR.support)); ctx.lineTo(width, getYP(item.weeklySR.support)); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Velas Japonesas
       klines.forEach((k, i) => {
         const x = i * candleWidth + candleWidth / 2;
-        const openY = getY(k.open);
-        const closeY = getY(k.close);
-        const highY = getY(k.high);
-        const lowY = getY(k.low);
+        const openY = getYP(k.open);
+        const closeY = getYP(k.close);
+        const highY = getYP(k.high);
+        const lowY = getYP(k.low);
 
         const isUp = k.close >= k.open;
         ctx.strokeStyle = isUp ? '#0ecb81' : '#f6465d';
         ctx.fillStyle = isUp ? '#0ecb81' : '#f6465d';
 
-        ctx.beginPath();
-        ctx.moveTo(x, highY);
-        ctx.lineTo(x, lowY);
-        ctx.stroke();
-
-        ctx.fillRect(x - candleWidth * 0.3, Math.min(openY, closeY), candleWidth * 0.6, Math.max(Math.abs(closeY - openY), 1));
+        ctx.beginPath(); ctx.moveTo(x, highY); ctx.lineTo(x, lowY); ctx.stroke();
+        ctx.fillRect(x - candleWidth * 0.35, Math.min(openY, closeY), candleWidth * 0.7, Math.max(Math.abs(closeY - openY), 1.5));
       });
 
-      // Líneas de Proyección de Precios
+      // Líneas TP
       ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = '#0ecb81';
+      ctx.strokeStyle = item.probBull >= 50 ? '#0ecb81' : '#f6465d';
       ctx.lineWidth = 1.5;
-      const targetY = getY(item.targetHigh);
-      ctx.beginPath();
-      ctx.moveTo(0, targetY);
-      ctx.lineTo(width, targetY);
-      ctx.stroke();
 
-      ctx.strokeStyle = '#f6465d';
-      const lowY = getY(item.targetLow);
-      ctx.beginPath();
-      ctx.moveTo(0, lowY);
-      ctx.lineTo(width, lowY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    function renderTable(items) {
-      const tbody = document.getElementById('table-body');
-      tbody.innerHTML = '';
-
-      items.forEach((item, index) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="rank-num">${index + 1}</td>
-          <td style="font-weight:700;">${item.symbol}</td>
-          <td style="font-family:var(--font-mono);">${formatPrice(item.price)}</td>
-          <td style="font-weight:700;" class="${item.probBull >= 50 ? 'val-up' : 'val-down'}">${item.probBull.toFixed(1)}%</td>
-          <td style="font-family:var(--font-mono);" class="val-up">${formatPrice(item.targetHigh)}</td>
-        `;
-        tbody.appendChild(tr);
+      [item.tp1, item.tp2].forEach(tpVal => {
+        const tpY = getYP(tpVal);
+        ctx.beginPath(); ctx.moveTo(0, tpY); ctx.lineTo(width, tpY); ctx.stroke();
       });
+      ctx.setLineDash([]);
+
+      // PANEL RSI
+      ctx.fillStyle = '#0f1115';
+      ctx.fillRect(0, rsiTop, width, rsiHeight);
+
+      const getYRSI = (val) => (rsiTop + rsiHeight) - ((val / 100) * rsiHeight);
+      ctx.strokeStyle = 'rgba(132, 142, 156, 0.3)';
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.moveTo(0, getYRSI(70)); ctx.lineTo(width, getYRSI(70)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, getYRSI(30)); ctx.lineTo(width, getYRSI(30)); ctx.stroke();
+      ctx.setLineDash([]);
+
+      const rsiSlice = item.rsiSeries.slice(-klines.length);
+      if (rsiSlice.length > 1) {
+        ctx.strokeStyle = '#f0b90b';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        rsiSlice.forEach((rsiVal, idx) => {
+          const x = idx * candleWidth + candleWidth / 2;
+          const y = getYRSI(rsiVal);
+          if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+
+      // EJE DE TIEMPO HORIZONTAL
+      ctx.fillStyle = '#181a20';
+      ctx.fillRect(0, timeAxisTop, width, height - timeAxisTop);
+      ctx.strokeStyle = '#2b313a';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, timeAxisTop); ctx.lineTo(width, timeAxisTop); ctx.stroke();
+
+      ctx.fillStyle = '#848e9c';
+      ctx.font = `${Math.floor(10 * window.devicePixelRatio)}px monospace`;
+      ctx.textAlign = 'center';
+
+      const labelStep = Math.ceil(klines.length / 6);
+      klines.forEach((k, i) => {
+        if (i % labelStep === 0 || i === klines.length - 1) {
+          const x = i * candleWidth + candleWidth / 2;
+          const labelText = formatDateForTF(k.time, currentTimeframe);
+          ctx.fillText(labelText, x, timeAxisTop + 14 * window.devicePixelRatio);
+          ctx.beginPath(); ctx.moveTo(x, timeAxisTop); ctx.lineTo(x, timeAxisTop + 4 * window.devicePixelRatio); ctx.stroke();
+        }
+      });
+
+      // Tooltip
+      canvas.onmousemove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const idx = Math.floor(mouseX / candleWidth);
+
+        if (idx >= 0 && idx < klines.length) {
+          const k = klines[idx];
+          const fullDateStr = new Date(k.time).toLocaleString('es-ES', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+          if (tooltip) {
+            tooltip.style.display = 'block';
+            tooltip.innerHTML = `[${fullDateStr}] O:${k.open} H:${k.high} L:${k.low} C:${k.close} | RSI: ${item.rsi.toFixed(1)}`;
+          }
+        }
+      };
+
+      canvas.onmouseleave = () => { if (tooltip) tooltip.style.display = 'none'; };
     }
 
     function formatPrice(val) {
