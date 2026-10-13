@@ -239,7 +239,7 @@
     td { padding: 8px 4px; border-bottom: 1px solid #22272e; font-size: 0.8rem; }
     td.mono { font-family: var(--font-mono); }
     td.bold { font-weight: 700; }
-    td.muted { color: var(--text-muted); }
+    td.muted, .muted { color: var(--text-muted); }
 
     .rank-num { color: var(--text-muted); font-weight: 600; width: 24px; }
     .val-up { color: var(--accent-green); }
@@ -333,7 +333,6 @@
       <p>En vivo tick-a-tick · Probabilidades calibradas con backtest sobre el historial</p>
     </div>
     <div class="header-actions">
-      <div id="refresh-timer" class="timer-badge">Rotación en: 30s</div>
       <button class="btn" onclick="openBacktestModal()">📊 Backtest</button>
       <button class="btn btn-primary" onclick="openModal()">⚙ Mi Portafolio (<span id="selected-count">0</span>)</button>
       <div class="status-badge">
@@ -401,6 +400,8 @@
     <span><i style="border-color: rgba(246,70,93,0.55); border-top-width: 8px; opacity: 0.6"></i>Zona de muro del libro (tramo de 0,5%)</span>
     <span><i style="border: 1px solid rgba(14,203,129,0.6); background: rgba(14,203,129,0.15); height: 8px"></i>FVG abierto (verde alcista, rojo bajista)</span>
     <span><i style="border-color: rgba(234,236,239,0.55)"></i>VWAP</span>
+    <span><i style="border-color: rgba(14,203,129,0.6); border-top-width: 6px"></i><i style="border-color: rgba(246,70,93,0.6); border-top-width: 6px; margin-left:-4px"></i>Volumen: compras / ventas agresivas</span>
+    <span><i style="border:none;width:10px;height:10px;border-radius:50%;background:rgba(14,203,129,0.6)"></i><i style="border:none;width:10px;height:10px;border-radius:50%;background:rgba(246,70,93,0.6);margin-left:-2px"></i>Órdenes grandes (compra / venta)</span>
     <span><i style="border-color: var(--accent-green); border-top-style: dashed"></i>TP1 / TP2</span>
     <span><i style="border-color: #b0b8c4; border-top-style: dashed"></i>SL</span>
   </div>
@@ -532,7 +533,7 @@
     const DEPTH_GAP_MS = 2500;
     const WS_RECONNECT_MS = 3000;
     const FLUSH_MS = 700;            // cada cuánto se recalcula y redibuja lo que cambió
-    const MAX_BT_PER_FLUSH = 3;      // backtests por ciclo (reparte la carga al cerrar vela)
+    const MAX_BT_PER_FLUSH = 1;      // backtests por ciclo (reparte la carga al cerrar vela)
     const FETCH_CONCURRENCY = 4;
 
     // ============================================================
@@ -549,7 +550,10 @@
       rsBars: 20,            // ventana de fuerza relativa vs BTC
       atrPctLookback: 500,   // ventana para el percentil de volatilidad
       feePct: 0.2,           // comisión ida y vuelta en %
-      calibK: 20,            // suavizado de la calibración hacia la tasa base
+      calibKind: 3,          // suavizado: equivale a 3 situaciones independientes (× horizonte, por superposición)
+      dirK: 25,              // episodios parecidos para estimar la dirección a 4 h
+      minSkill: 0.01,        // skill fuera de muestra mínimo para mostrar una dirección
+      minEdge: 0.03,         // y al menos 3 puntos de diferencia con la tasa base
       minCalibN: 150,        // muestras mínimas para usar la probabilidad calibrada
       strongDev: 10,         // |puntaje - 50| para "señal fuerte"
       warmup: 60
@@ -697,7 +701,8 @@
         volAvg: rv.avg,
         vwap: tf === '1d' ? rollingVwapSeries(kl, 20) : sessionVwapSeries(kl),
         htf: htfTrendSeries(kl, item.htfKlines, TF_MS[tf], TF_MS[HTF_OF[tf]]),
-        rs: item.symbol === 'BTCUSDT' ? new Array(kl.length).fill(null) : rsSeries(kl, btcKl, CFG.rsBars)
+        rs: item.symbol === 'BTCUSDT' ? new Array(kl.length).fill(null) : rsSeries(kl, btcKl, CFG.rsBars),
+        ...flowSeries(kl)
       };
       item.ser.rsi = item.ser.rsiBy[item.rsiP] || item.ser.rsiBy[14];
     }
@@ -733,6 +738,124 @@
         }
       }
       applyRsiChoice(item, mode);
+    }
+
+    // ---------------- Flujo de órdenes (volumen agresivo) ----------------
+    // buyRatio: parte del volumen que fueron compras a mercado. delta: compras − ventas agresivas en USDT.
+    // cvd: delta acumulado. Si la vela no trae el dato de compra (caché vieja), queda en null.
+    function flowSeries(kl) {
+      const buyRatio = new Array(kl.length).fill(null), delta = new Array(kl.length).fill(null), cvd = new Array(kl.length).fill(null);
+      let acc = 0, any = false;
+      kl.forEach((b, i) => {
+        if (b.buy != null && b.volume > 0) {
+          buyRatio[i] = b.buy / b.volume;
+          delta[i] = (2 * b.buy - b.volume) * b.close;
+          acc += delta[i]; any = true;
+        }
+        cvd[i] = any ? acc : null;
+      });
+      return { buyRatio, delta, cvd };
+    }
+
+    const FLOW = { win: 20, climaxRel: 3, climaxLook: 12, tradeBase: 200 };
+
+    // Lectura del volumen operado en la vela actual y las recientes
+    function volumeAnalysis(kl, ser, tf) {
+      const n = kl.length, i = n - 1;
+      if (n < FLOW.win + 2) return null;
+      const quoteOf = b => b.quote != null ? b.quote : b.volume * b.close;
+      const out = {};
+      // Volumen operado en 24 h vs promedio diario de los 7 días anteriores
+      const per24 = Math.max(1, Math.round(864e5 / TF_MS[tf]));
+      let q24 = 0;
+      for (let j = Math.max(0, n - per24); j < n; j++) q24 += quoteOf(kl[j]);
+      out.q24 = q24;
+      if (n >= per24 * 8) {
+        let prev = 0;
+        for (let j = n - per24 * 8; j < n - per24; j++) prev += quoteOf(kl[j]);
+        out.q24ratio = q24 / (prev / 7);
+      }
+      // Presión compradora y delta de las últimas 20 velas
+      let bv = 0, vv = 0, d20 = 0, q20 = 0, have = 0;
+      for (let j = n - FLOW.win; j < n; j++) {
+        if (kl[j].buy == null) continue;
+        bv += kl[j].buy; vv += kl[j].volume; d20 += ser.delta[j]; q20 += quoteOf(kl[j]); have++;
+      }
+      out.hasFlow = have >= FLOW.win * 0.8;
+      if (out.hasFlow) {
+        out.buyPct = vv > 0 ? bv / vv : 0.5;
+        out.delta20 = d20;
+        out.deltaNow = ser.delta[i];
+        out.buyNow = ser.buyRatio[i];
+        // Divergencia: el precio va para un lado y el flujo agresivo para el otro
+        const atrPct = ser.atr[i] ? ser.atr[i] / kl[i].close : 0.01;
+        const pChg = kl[i].close / kl[n - FLOW.win].close - 1;
+        const flowShare = q20 > 0 ? d20 / q20 : 0;                       // −1..1
+        out.priceChg = pChg; out.flowShare = flowShare;
+        if (pChg < -atrPct && out.buyPct > 0.52) out.divergence = { type: 'absorción', bull: true, txt: 'el precio baja pero predominan las compras agresivas' };
+        else if (pChg > atrPct && out.buyPct < 0.48) out.divergence = { type: 'distribución', bull: false, txt: 'el precio sube pero predominan las ventas agresivas' };
+        else out.divergence = null;
+      }
+      // Tamaño medio por operación (últimas 20 vs las 200 anteriores)
+      const avgTrade = (a, b) => { let q = 0, t = 0; for (let j = a; j < b; j++) if (kl[j].trades) { q += quoteOf(kl[j]); t += kl[j].trades; } return t ? q / t : null; };
+      const recentT = avgTrade(n - FLOW.win, n), baseT = avgTrade(Math.max(0, n - FLOW.win - FLOW.tradeBase), n - FLOW.win);
+      if (recentT && baseT) { out.avgTrade = recentT; out.tradeRatio = recentT / baseT; }
+      // Vela de clímax reciente: volumen extremo, con la mecha que muestra rechazo
+      for (let j = n - 2; j >= Math.max(1, n - 1 - FLOW.climaxLook); j--) {
+        const rv = ser.relVol[j];
+        if (rv == null || rv < FLOW.climaxRel) continue;
+        const b = kl[j], range = (b.high - b.low) || 1;
+        const lowerWick = (Math.min(b.open, b.close) - b.low) / range, upperWick = (b.high - Math.max(b.open, b.close)) / range;
+        const sell = b.close < b.open;
+        out.climax = { ago: n - 1 - j, rel: rv, sell, wick: sell ? lowerWick : upperWick,
+                       buyPct: b.buy != null && b.volume > 0 ? b.buy / b.volume : null };
+        break;
+      }
+      return out;
+    }
+
+    // ---------------- Operaciones individuales: ¿grandes o chicos? ----------------
+    // Cada aggTrade de Binance es una orden de mercado ejecutada (puede tocar varios niveles del libro).
+    const TRADES = {
+      winMs: 3600e3,      // se analiza la última hora
+      cap: 30000,         // máximo de operaciones guardadas por par
+      bigPctl: 0.99,      // "grande" = 1% superior de los tamaños…
+      bigMult: 10,        // …o 10× la mediana, lo que sea mayor
+      minBigUsd: 1000,
+      oneOrder: 0.25      // una sola orden con ≥25% del volumen de su lado = "un operador grande"
+    };
+
+    function analyzeTrades(trades, now) {
+      if (!trades || !trades.length) return null;
+      const w = trades.filter(t => now - t.T <= TRADES.winMs);
+      if (w.length < 30) return null;
+      const sorted = w.map(t => t.usd).sort((a, b) => a - b);
+      const med = sorted[Math.floor(sorted.length / 2)];
+      const pHi = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * TRADES.bigPctl))];
+      const thr = Math.max(pHi, med * TRADES.bigMult, TRADES.minBigUsd);
+      const side = isBuy => {
+        const list = w.filter(t => t.buy === isBuy);
+        let total = 0, bigUsd = 0, bigN = 0, top1 = null;
+        for (const t of list) {
+          total += t.usd;
+          if (t.usd >= thr) { bigUsd += t.usd; bigN++; }
+          if (!top1 || t.usd > top1.usd) top1 = t;
+        }
+        const bigShare = total > 0 ? bigUsd / total : 0;
+        let verdict, level;
+        if (!list.length) { verdict = 'sin operaciones'; level = 0; }
+        else if (top1 && top1.usd >= thr && top1.usd / total >= TRADES.oneOrder) { verdict = 'un operador grande'; level = 3; }
+        else if (bigShare >= 0.5) { verdict = 'pocos operadores grandes'; level = 2; }
+        else if (bigShare >= 0.25) { verdict = 'mezcla, con peso de grandes'; level = 1; }
+        else { verdict = 'muchos operadores chicos'; level = 0; }
+        return { total, n: list.length, bigN, bigUsd, bigShare, top1, verdict, level };
+      };
+      const buy = side(true), sell = side(false);
+      return {
+        from: w[0].T, to: w[w.length - 1].T, n: w.length, thr, med, buy, sell,
+        bigNet: buy.bigUsd - sell.bigUsd,
+        bigTrades: w.filter(t => t.usd >= thr).slice(-80)
+      };
     }
 
     // Puntaje técnico 5–95 (50 = neutro). Usa solo datos de la vela i y anteriores.
@@ -857,21 +980,29 @@
       return BUCKETS.length - 2;
     }
 
-    function fitCalibration(recs) {
-      const buckets = BUCKETS.slice(0, -1).map((lo, i) => ({ lo, hi: Math.min(95, BUCKETS[i + 1]), n: 0, up: 0 }));
+    // Frecuencias por rango de puntaje y, dentro de cada rango, por tendencia de la temporalidad mayor
+    function fitCalibration(recs, H) {
+      const z = () => ({ n: 0, up: 0 });
+      const buckets = BUCKETS.slice(0, -1).map((lo, i) => ({ lo, hi: Math.min(95, BUCKETS[i + 1]), n: 0, up: 0, cells: [z(), z(), z()] }));
       let up = 0;
       for (const r of recs) {
-        const b = buckets[bucketIndex(r.s)];
-        b.n++;
-        if (r.up) { b.up++; up++; }
+        const b = buckets[bucketIndex(r.s)], c = b.cells[(r.h || 0) + 1];
+        b.n++; c.n++;
+        if (r.up) { b.up++; c.up++; up++; }
       }
-      return { buckets, base: recs.length ? up / recs.length : 0.5, total: recs.length };
+      return { buckets, base: recs.length ? up / recs.length : 0.5, total: recs.length, H: H || 1 };
     }
 
-    // Frecuencia observada en el rango del puntaje, suavizada hacia la tasa base
-    function calibrate(s, fit) {
+    // Probabilidad suavizada en dos niveles: celda (puntaje × tendencia) → rango de puntaje → tasa base.
+    // Las muestras se superponen (comparten H−1 velas), así que el suavizado se mide en situaciones
+    // independientes: K = calibKind × H muestras.
+    function calibrate(s, fit, h) {
+      const K = CFG.calibKind * (fit.H || 1);
       const b = fit.buckets[bucketIndex(s)];
-      return (b.up + CFG.calibK * fit.base) / (b.n + CFG.calibK);
+      const pB = (b.up + K * fit.base) / (b.n + K);
+      if (h == null) return pB;
+      const c = b.cells[h + 1];
+      return (c.up + K * pB) / (c.n + K);
     }
 
     function runBacktest(item, tf) {
@@ -933,36 +1064,56 @@
           }
           if (hit[2]) break;
         }
-        recs.push({ t, s, dir, up: kl[t + H].close > price, ret: kl[t + H].close / price - 1, hit, barsTo1, full: t + W <= last });
+        recs.push({ t, s, dir, h: ser.htf[t] || 0, f: analogFeatures(kl, ser, t, rank),
+                    up: kl[t + H].close > price, ret: kl[t + H].close / price - 1, hit, barsTo1, full: t + W <= last });
       }
       if (recs.length < 100) return null;
 
-      const fit = fitCalibration(recs);
+      const fit = fitCalibration(recs, H);
+      const dirRows = recs.filter(r => r.f);
+      const dirModel = dirRows.length >= 200 ? { rows: dirRows, scale: featureScale(dirRows.map(r => r.f)), H } : null;
 
       // Validación fuera de muestra: calibrar con el 70% inicial, evaluar en el 30% final
       const split = Math.floor(recs.length * 0.7);
       const train = recs.slice(0, split);
       const gapT = train[train.length - 1].t + H;              // evita solapamiento entre tramos
       const test = recs.slice(split).filter(r => r.t > gapT);
-      const fitTr = fitCalibration(train);
-      let oos = null;
+      const fitTr = fitCalibration(train, H);
+      let oos = null, oosParts = null;
       if (test.length >= 50) {
-        let acc = 0, accBase = 0, br = 0, brBase = 0;
+        // Casos parecidos: solo se busca dentro del tramo de entrenamiento
+        const trRows = train.filter(r => r.f);
+        const scTr = trRows.length >= 100 ? featureScale(trRows.map(r => r.f)) : null;
+        const step = Math.max(1, Math.floor(H / 4));
+        const ev = { ens: [0, 0], cal: [0, 0], an: [0, 0] };   // [Brier, aciertos]
+        let accBase = 0, brBase = 0, n = 0;
         const baseUp = fitTr.base >= 0.5;
-        for (const r of test) {
-          const p = calibrate(r.s, fitTr), y = r.up ? 1 : 0;
-          if ((p >= 0.5) === r.up) acc++;
+        test.forEach((r, idx) => {
+          if (idx % step) return;
+          const y = r.up ? 1 : 0;
+          const pc = calibrate(r.s, fitTr, r.h);
+          const a = scTr && r.f ? findAnalogs(trRows, r.f, scTr, H, CFG.dirK) : null;
+          const pa = a ? a.pUp : pc;
+          const pe = (pc + pa) / 2;
+          for (const [k, p] of [['ens', pe], ['cal', pc], ['an', pa]]) {
+            ev[k][0] += (p - y) ** 2;
+            if ((p >= 0.5) === r.up) ev[k][1]++;
+          }
           if (baseUp === r.up) accBase++;
-          br += (p - y) ** 2;
           brBase += (fitTr.base - y) ** 2;
+          n++;
+        });
+        if (n >= 30) {
+          const sk = k => brBase > 0 ? 1 - ev[k][0] / brBase : 0;
+          oos = { n, acc: ev.ens[1] / n, accBase: accBase / n, skill: sk('ens') };
+          oosParts = { cal: sk('cal'), an: sk('an') };
         }
-        oos = { n: test.length, acc: acc / test.length, accBase: accBase / test.length, skill: brBase > 0 ? 1 - br / brBase : 0 };
       }
       // Calidad dentro del tramo de entrenamiento: sirve para elegir parámetros sin tocar la validación
       let trB = 0, trBase = 0;
       for (const r of train) {
         const y = r.up ? 1 : 0;
-        trB += (calibrate(r.s, fitTr) - y) ** 2;
+        trB += (calibrate(r.s, fitTr, r.h) - y) ** 2;
         trBase += (fitTr.base - y) ** 2;
       }
       const trainSkill = trBase > 0 ? 1 - trB / trBase : 0;
@@ -993,7 +1144,7 @@
       }
 
       return {
-        n: recs.length, H, fit, oos, tp, strong, trainSkill,
+        n: recs.length, H, fit, oos, oosParts, dirModel, tp, strong, trainSkill,
         fvg: fvgFillStats(kl, ser.atr, CFG.warmup, last, FVG.fillWinMult * H),
         move: moveStats(moves, MV),
         analog: buildAnalog(moves, MV),
@@ -1022,8 +1173,26 @@
       item.score = clamp(sTech + item.obi * 15, 5, 95);
 
       const bt = item.bt;
-      item.probCal = (bt && bt.n >= CFG.minCalibN) ? calibrate(sTech, bt.fit) * 100 : null;
+      item.probParts = null;
+      if (bt && bt.n >= CFG.minCalibN) {
+        const pc = calibrate(sTech, bt.fit, ser.htf[i] || 0);
+        let pa = null, aInfo = null;
+        if (bt.dirModel && i >= 1) {
+          aInfo = findAnalogs(bt.dirModel.rows, analogFeatures(kl, ser, i - 1, atrRankAt(ser, i - 1, CFG.atrPctLookback)), bt.dirModel.scale, bt.dirModel.H, CFG.dirK);
+          if (aInfo) pa = aInfo.pUp;
+        }
+        const p = pa != null ? (pc + pa) / 2 : pc;
+        item.probCal = p * 100;
+        item.probParts = { cal: pc, an: pa, ups: aInfo ? aInfo.ups : null, k: aInfo ? aInfo.k : null };
+      } else item.probCal = null;
       item.probBull = item.probCal != null ? item.probCal : item.score;
+      // ¿Hay ventaja real? Validación positiva y distancia suficiente de la tasa base
+      item.noEdge = !(bt && bt.oos && bt.oos.skill >= CFG.minSkill && item.probCal != null &&
+                      Math.abs(item.probCal / 100 - bt.fit.base) >= CFG.minEdge);
+      // Conflicto: la probabilidad apunta contra la tendencia mayor y contra los indicadores
+      const htfNow = ser.htf[i] || 0;
+      item.conflict = (item.probBull >= 50 && htfNow < 0 && sTech < 40) ? 'rebote contra tendencia bajista'
+                    : (item.probBull < 50 && htfNow > 0 && sTech > 60) ? 'retroceso contra tendencia alcista' : null;
       item.analog = (bt && bt.analog)
         ? findAnalogs(bt.analog.rows, analogFeatures(kl, ser, i - 1, atrRankAt(ser, i - 1, CFG.atrPctLookback)), bt.analog.scale, bt.analog.M)
         : null;
@@ -1031,7 +1200,8 @@
         ? { ...predictMove(bt.move.fit, regimeBucket(atrRankAt(ser, i, CFG.atrPctLookback)), sideBucket(sTech)),
             rb: regimeBucket(atrRankAt(ser, i, CFG.atrPctLookback)), sb: sideBucket(sTech) }
         : null;
-      const dir = item.probBull >= 50 ? 1 : -1;
+      // Sin ventaja, los objetivos siguen a la tendencia mayor (o a los indicadores si no hay tendencia)
+      const dir = item.noEdge ? (htfNow || (sTech >= 50 ? 1 : -1)) : (item.probBull >= 50 ? 1 : -1);
       item.dir = dir;
 
       const atr = ser.atr[i];
@@ -1044,6 +1214,7 @@
       const piv = findPivots(kl, CFG.pivotK, kl.length - 2).filter(p => p.idx >= i - CFG.levelLookback);
       item.clusters = clusterLevels(piv.map(p => p.price), 0.6 * atr);
       item.vp = volumeProfile(kl, CFG.vpBars, CFG.vpBins);
+      item.vol = volumeAnalysis(kl, ser, tf);
 
       // FVG abiertos: el más cercano de cada tipo y si el precio está dentro de alguno
       const fvgs = openFVGs(kl, ser.atr, i);
@@ -1100,7 +1271,7 @@
         clusters: [], vp: null, sr: null, weeklySR: { resistance: 0, support: 0 },
         tp1: 0, tp2: 0, tp3: 0, sl: 0, ready: false, loadError: null,
         bookSnaps: [], book: null,
-        rsiP: 14, btBy: null, fvg: null, move: null, analog: null, major: null, majorKey: '', majorNear: null
+        bookAnchor: null, vol: null, trades: [], tradeStats: null, rsiP: 14, btBy: null, fvg: null, move: null, analog: null, probParts: null, noEdge: true, conflict: null, major: null, majorKey: '', majorNear: null
       };
     }
 
@@ -1287,10 +1458,23 @@
       minEvents: 8,       // saltos mínimos en la validación para informar un skill
       show: 5,            // casos mostrados en pantalla
       // peso de cada componente de la huella (en el mismo orden que analogFeatures)
-      w: [2.0, 1.0, 1.2, 1.0, 0.8, 1.0, 0.6, 0.6, 0.5, 0.6],
+      w: [2.0, 1.0, 1.2, 1.0, 0.8, 1.0, 0.6, 0.6, 0.5, 0.6, 0.8, 0.8],
       names: ['volatilidad (ATR%)', 'percentil de volatilidad', 'compresión del rango', 'impulso', 'volumen', 'RSI',
-              'distancia al VWAP', 'MACD', 'tendencia mayor', 'posición en el rango']
+              'distancia al VWAP', 'MACD', 'tendencia mayor', 'posición en el rango',
+              'presión compradora (5 velas)', 'CVD (20 velas)']
     };
+
+    function flowBuy5(kl, t) {
+      let b = 0, v = 0;
+      for (let j = t - 4; j <= t; j++) if (kl[j].buy != null) { b += kl[j].buy; v += kl[j].volume; }
+      return v > 0 ? b / v : 0.5;
+    }
+    function flowCvd20(kl, ser, t) {
+      if (!ser.cvd || ser.cvd[t] == null || ser.cvd[t - 20] == null) return 0;
+      let q = 0;
+      for (let j = t - 19; j <= t; j++) q += kl[j].volume * kl[j].close;
+      return q > 0 ? clamp((ser.cvd[t] - ser.cvd[t - 20]) / q, -1, 1) : 0;
+    }
 
     // Huella de la vela t: solo usa información disponible al cierre de t
     function analogFeatures(kl, ser, t, rank) {
@@ -1312,7 +1496,9 @@
         vw ? clamp((c - vw) / atr, -4, 4) : 0,
         ser.hist[t] != null ? clamp(ser.hist[t] / atr, -2, 2) : 0,
         ser.htf[t] || 0,
-        (c - lo) / ((hi - lo) || 1)                          // dónde está el precio dentro del rango
+        (c - lo) / ((hi - lo) || 1),                         // dónde está el precio dentro del rango
+        flowBuy5(kl, t),                                     // parte de compras agresivas, últimas 5 velas
+        flowCvd20(kl, ser, t)                                // dirección del flujo agresivo, últimas 20 velas
       ];
     }
 
@@ -1330,14 +1516,15 @@
     }
 
     // Busca los episodios más parecidos (sin tomar dos velas del mismo episodio) y cuenta qué pasó después
-    function findAnalogs(cands, vec, sc, M) {
+    function findAnalogs(cands, vec, sc, M, kWanted) {
+      const K_EP = kWanted || ANALOG.k;
       if (!vec || cands.length < 50) return null;
       const ds = cands.map(m => ({ m, d: analogDist(vec, m.f, sc) })).sort((a, b) => a.d - b.d);
       const dMed = ds[Math.floor(ds.length / 2)].d || 1;
       const chosen = [];
       for (const x of ds) {
         if (chosen.every(c => Math.abs(c.m.t - x.m.t) >= M / 2)) chosen.push(x);
-        if (chosen.length >= ANALOG.k) break;
+        if (chosen.length >= K_EP) break;
       }
       let bu = 0, bd = 0;
       for (const m of cands) { if (m.up) bu++; if (m.dn) bd++; }
@@ -1461,33 +1648,48 @@
       minSnaps: 3,        // lecturas mínimas para confirmar un muro
       minRatio: 2,        // un muro tiene que tener ≥2× la mediana de los tramos
       minPresence: 0.6,   // y destacarse en ≥60% de las lecturas
-      nearPct: 1          // la presión del libro se mide dentro de ±1%
+      nearPct: 1,         // la presión del libro se mide dentro de ±1%
+      maxAgeMs: 180000,   // lecturas de más de 3 minutos se descartan
+      minDistPct: 0.5     // un muro tiene que estar a más de 0,5% del precio actual
     };
 
-    // Resume una lectura del libro: dinero (USDT) por tramo de distancia al precio medio
-    function bookSnapshot(depth, now) {
+    // Los tramos de 0,5% están fijos en precio absoluto (escala logarítmica desde un "ancla" por par):
+    // el tramo k cubre [ancla·(1+0,5%)^k, ancla·(1+0,5%)^(k+1)). Así una misma zona de precio conserva su
+    // tramo aunque el precio se mueva entre lecturas.
+    const BOOK_L = Math.log(1 + BOOK.bucketPct / 100);
+    const bookK = (p, anchor) => Math.floor(Math.log(p / anchor) / BOOK_L);
+    const bookP = (k, anchor) => anchor * Math.exp(k * BOOK_L);
+
+    // Resume una lectura del libro: USDT por tramo absoluto, a cada lado, y qué tramos cubre por completo
+    function bookSnapshot(depth, now, anchor) {
       if (!depth || !Array.isArray(depth.bids) || !Array.isArray(depth.asks)) return null;
       const bids = depth.bids.map(l => [+l[0], +l[1]]).filter(l => l[0] > 0 && l[1] > 0);
       const asks = depth.asks.map(l => [+l[0], +l[1]]).filter(l => l[0] > 0 && l[1] > 0);
       if (!bids.length || !asks.length) return null;
       const mid = (bids[0][0] + asks[0][0]) / 2;
+      const A = anchor || mid;
       const side = (levels, sgn) => {
-        const notional = new Array(BOOK.maxBuckets).fill(0);
-        const pv = new Array(BOOK.maxBuckets).fill(0);
-        let cover = 0, near = 0;
+        const b = {};
+        let far = mid, near = 0;
         for (const [p, q] of levels) {
-          const d = sgn * (p / mid - 1) * 100;      // distancia positiva al precio, en %
-          if (d < 0) continue;
-          if (d > cover) cover = d;
+          const d = sgn * (p / mid - 1) * 100;
+          if (d < 0 || d > BOOK.maxBuckets * BOOK.bucketPct) continue;
+          if (sgn > 0 ? p > far : p < far) far = p;
           if (d <= BOOK.nearPct) near += p * q;
-          const k = Math.floor(d / BOOK.bucketPct);
-          if (k < BOOK.maxBuckets) { notional[k] += p * q; pv[k] += p * p * q; }
+          const k = bookK(p, A);
+          const c = b[k] || (b[k] = { n: 0, pv: 0 });
+          c.n += p * q; c.pv += p * p * q;
         }
-        return { notional, vwp: notional.map((n, k) => n > 0 ? pv[k] / n : null), cover, near };
+        // Tramos cubiertos por completo por esta lectura (entre el precio y el nivel más lejano visible)
+        const kMid = bookK(mid, A), kFar = bookK(far, A);
+        const kFrom = sgn > 0 ? kMid + 1 : kFar + 1, kTo = sgn > 0 ? kFar - 1 : kMid - 1;
+        const full = [];
+        for (let k = kFrom; k <= kTo; k++) full.push(b[k] ? b[k].n : 0);
+        return { b, kFrom, kTo, cover: Math.abs(far / mid - 1) * 100, near, med: median(full) };
       };
       const ask = side(asks, 1), bid = side(bids, -1);
       const tot = ask.near + bid.near;
-      return { t: now, mid, ask, bid, obi: tot > 0 ? (bid.near - ask.near) / tot : 0 };
+      return { t: now, mid, anchor: A, ask, bid, obi: tot > 0 ? (bid.near - ask.near) / tot : 0 };
     }
 
     const median = arr => {
@@ -1496,48 +1698,56 @@
       return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
     };
 
-    // Combina las últimas lecturas: promedio por tramo y detección de muros persistentes
-    function analyzeBook(snaps) {
-      if (!snaps || !snaps.length) return null;
+    // Combina las lecturas recientes y detecta muros persistentes respecto del precio ACTUAL
+    function analyzeBook(snaps, price, now) {
+      if (!snaps || !snaps.length || !(price > 0)) return null;
+      const fresh = snaps.filter(x => now - x.t <= BOOK.maxAgeMs);
       const last = snaps[snaps.length - 1];
-      const out = { mid: last.mid, obi: last.obi, t: last.t, nSnaps: snaps.length, sides: {} };
+      const out = { t: last.t, obi: last.obi, price, nSnaps: fresh.length, stale: !fresh.length, sides: {} };
+      const A = last.anchor;
+      const kNow = bookK(price, A);
       for (const s of ['ask', 'bid']) {
-        const cover = Math.min(...snaps.map(x => x[s].cover));   // cobertura garantizada en todas las lecturas
-        const nb = clamp(Math.ceil(cover / BOOK.bucketPct), 1, BOOK.maxBuckets);
+        const sgn = s === 'ask' ? 1 : -1;
+        // Histograma: los 3 tramos más cercanos al precio actual, según la última lectura
         const buckets = [];
-        for (let k = 0; k < nb; k++) {
-          let n = 0, pv = 0;
-          for (const x of snaps) { const v = x[s].notional[k]; n += v; if (x[s].vwp[k]) pv += x[s].vwp[k] * v; }
-          buckets.push({
-            k, from: k * BOOK.bucketPct, to: (k + 1) * BOOK.bucketPct,
-            notional: n / snaps.length,
-            price: n > 0 ? pv / n : null,
-            partial: (k + 1) * BOOK.bucketPct > cover + 1e-9
-          });
+        for (let j = 0; j < 3; j++) {
+          const k = sgn > 0 ? kNow + 1 + j : kNow - 1 - j;
+          const lo = bookP(k, A), hi = bookP(k + 1, A);
+          buckets.push({ k, lo, hi, notional: last[s].b[k] ? last[s].b[k].n : 0,
+                         partial: k < last[s].kFrom || k > last[s].kTo,
+                         from: Math.abs((sgn > 0 ? lo : hi) / price - 1) * 100, to: Math.abs((sgn > 0 ? hi : lo) / price - 1) * 100 });
         }
-        const full = buckets.filter(b => !b.partial);
-        const med = median(full.map(b => b.notional));
         let wall = null, reason = null;
-        if (full.length < 3) reason = 'cobertura';
-        else if (snaps.length < BOOK.minSnaps) reason = 'confirmando';
+        if (!fresh.length) reason = 'viejo';
+        else if (last[s].cover < BOOK.minDistPct + BOOK.bucketPct) reason = 'cobertura';
+        else if (fresh.length < BOOK.minSnaps) reason = 'confirmando';
         else {
-          // Candidatos: tramos completos a más de 0,5% del precio (lo pegado al precio es liquidez normal)
+          // Candidatos: tramos del lado correcto del precio actual, a más de 0,5% y dentro de ±5%
+          const ks = new Set();
+          fresh.forEach(x => { for (let k = x[s].kFrom; k <= x[s].kTo; k++) ks.add(k); });
+          const medAvg = fresh.reduce((a, x) => a + x[s].med, 0) / fresh.length;
           let best = null;
-          for (const b of full) {
-            if (b.k < 1 || !b.price || med <= 0 || b.notional < BOOK.minRatio * med) continue;
-            let hits = 0;
-            for (const x of snaps) {
-              const m = median(x[s].notional.slice(0, full.length));
-              if (m > 0 && x[s].notional[b.k] >= BOOK.minRatio * m) hits++;
+          for (const k of ks) {
+            const lo = bookP(k, A), hi = bookP(k + 1, A);
+            const dNear = sgn > 0 ? (lo / price - 1) * 100 : (1 - hi / price) * 100;
+            if (dNear < BOOK.minDistPct || dNear > BOOK.maxBuckets * BOOK.bucketPct) continue;
+            const cov = fresh.filter(x => k >= x[s].kFrom && k <= x[s].kTo);
+            if (cov.length < BOOK.minSnaps) continue;
+            let n = 0, pv = 0, hits = 0;
+            for (const x of cov) {
+              const c = x[s].b[k];
+              const v = c ? c.n : 0;
+              n += v; if (c) pv += c.pv;
+              if (x[s].med > 0 && v >= BOOK.minRatio * x[s].med) hits++;
             }
-            const presence = hits / snaps.length;
-            if (presence < BOOK.minPresence) continue;
-            if (!best || b.notional > best.notional) best = { ...b, ratio: b.notional / med, presence };
+            const avg = n / cov.length, presence = hits / cov.length;
+            if (medAvg <= 0 || avg < BOOK.minRatio * medAvg || presence < BOOK.minPresence) continue;
+            if (!best || avg > best.notional) best = { k, lo, hi, notional: avg, price: n > 0 ? pv / n : (lo + hi) / 2, ratio: avg / medAvg, presence };
           }
-          if (best) wall = { ...best, distPct: (best.price / last.mid - 1) * 100 };
+          if (best) wall = { ...best, distPct: (best.price / price - 1) * 100 };
           else reason = 'ninguno';
         }
-        out.sides[s] = { cover, buckets, median: med, wall, reason };
+        out.sides[s] = { cover: last[s].cover, buckets, wall, reason };
       }
       return out;
     }
@@ -1557,6 +1767,7 @@
     let ws = null;
     let depthTimeout = null;
     let wsReconnectTimeout = null;
+    let tradeWs = null, tradeWsKey = '', tradeWsTimeout = null;
     let timerInterval = null;
     let analysisGen = 0;               // descarta tareas de análisis anteriores
     const dirty = new Set();           // pares con cambios pendientes de recalcular
@@ -1676,8 +1887,9 @@
       };
     })();
 
-    const toCompact = bars => bars.map(b => [b.time, b.open, b.high, b.low, b.close, b.volume]);
-    const fromCompact = arr => arr.map(a => ({ time: a[0], open: a[1], high: a[2], low: a[3], close: a[4], volume: a[5] }));
+    const toCompact = bars => bars.map(b => [b.time, b.open, b.high, b.low, b.close, b.volume, b.quote, b.trades, b.buy]);
+    const fromCompact = arr => arr.map(a => ({ time: a[0], open: a[1], high: a[2], low: a[3], close: a[4], volume: a[5],
+                                              quote: a[6] ?? null, trades: a[7] ?? null, buy: a[8] ?? null }));
 
     async function clearHistoryCache() {
       await Cache.clear();
@@ -1702,7 +1914,9 @@
       throw new Error('Límite de peticiones de Binance alcanzado');
     }
 
-    const parseKline = d => ({ time: d[0], open: +d[1], high: +d[2], low: +d[3], close: +d[4], volume: +d[5] });
+    // Además de OHLCV: monto en USDT (7), cantidad de operaciones (8) y volumen de compra agresiva (9)
+    const parseKline = d => ({ time: d[0], open: +d[1], high: +d[2], low: +d[3], close: +d[4], volume: +d[5],
+                               quote: d[7] != null ? +d[7] : null, trades: d[8] != null ? +d[8] : null, buy: d[9] != null ? +d[9] : null });
 
     async function fetchKlines(sym, interval, opts = {}) {
       const limit = opts.limit || 1000;
@@ -1724,7 +1938,7 @@
 
     // Carga historial con caché: pide solo lo nuevo hacia adelante y completa hacia atrás si falta
     async function loadHistory(sym, interval, target) {
-      const key = `${sym}_${interval}`;
+      const key = `v2_${sym}_${interval}`;
       const ms = TF_MS[interval];
       const cached = await Cache.get(key);
       let bars = cached && cached.b ? fromCompact(cached.b) : [];
@@ -1761,8 +1975,8 @@
 
     function saveToCache(item, interval) {
       if (!item.klines.length) return;
-      Cache.get(`${item.symbol}_${interval}`).then(c => {
-        Cache.set(`${item.symbol}_${interval}`, { b: toCompact(item.klines.slice(-CACHE_MAX)), full: !!(c && c.full) });
+      Cache.get(`v2_${item.symbol}_${interval}`).then(c => {
+        Cache.set(`v2_${item.symbol}_${interval}`, { b: toCompact(item.klines.slice(-CACHE_MAX)), full: !!(c && c.full) });
       });
     }
 
@@ -1990,6 +2204,9 @@
     // ============================================================
     function stopLiveTasks() {
       if (ws) { const old = ws; ws = null; old.close(); }
+      if (tradeWs) { const old = tradeWs; tradeWs = null; old.close(); }
+      tradeWsKey = '';
+      if (tradeWsTimeout) { clearTimeout(tradeWsTimeout); tradeWsTimeout = null; }
       if (depthTimeout) { clearTimeout(depthTimeout); depthTimeout = null; }
       if (wsReconnectTimeout) { clearTimeout(wsReconnectTimeout); wsReconnectTimeout = null; }
       document.getElementById('status-dot').classList.remove('connected');
@@ -2086,7 +2303,7 @@
         try { msg = JSON.parse(event.data); } catch (e) { return; }
         if (!msg.data || !msg.data.k) return;
         const k = msg.data.k;
-        const c = { time: k.t, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v };
+        const c = { time: k.t, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v, quote: k.q != null ? +k.q : null, trades: k.n != null ? +k.n : null, buy: k.V != null ? +k.V : null };
 
         if (k.s === 'BTCUSDT' && !state.BTCUSDT && btcRef) {
           if (applyCandle(btcRef, c)) saveToCache(btcRef, tf);
@@ -2114,27 +2331,83 @@
       socket.onerror = () => {};
     }
 
+    // Guarda una operación (aggTrade) en el par: m = true significa que el comprador era el pasivo → fue una VENTA a mercado
+    function pushTrade(item, a) {
+      const p = +a.p, q = +a.q;
+      if (!(p > 0 && q > 0)) return;
+      item.trades.push({ T: a.T, p, usd: p * q, buy: !a.m });
+      if (item.trades.length > TRADES.cap * 1.2) item.trades.splice(0, item.trades.length - TRADES.cap);
+    }
+
+    // Escucha las operaciones individuales solo de los pares que están en pantalla
+    function syncTradeStream() {
+      const gen = analysisGen;
+      const syms = activeGridSymbols.filter(s => state[s]);
+      const key = syms.join(',');
+      if (key === tradeWsKey && tradeWs) return;
+      if (tradeWs) { const old = tradeWs; tradeWs = null; old.close(); }
+      if (tradeWsTimeout) { clearTimeout(tradeWsTimeout); tradeWsTimeout = null; }
+      tradeWsKey = key;
+      if (!syms.length) return;
+      // Carga inicial: las últimas 1000 operaciones de cada par que todavía no tiene datos
+      syms.forEach(async sym => {
+        const item = state[sym];
+        if (!item || item.trades.length) return;
+        try {
+          const arr = await fetchJSON(`https://api.binance.com/api/v3/aggTrades?symbol=${sym}&limit=1000`, 1);
+          if (gen !== analysisGen || !state[sym] || !Array.isArray(arr)) return;
+          const seen = new Set(item.trades.map(t => t.T + ':' + t.usd));
+          arr.forEach(a => { if (!seen.has(a.T + ':' + (+a.p * +a.q))) pushTrade(item, a); });
+          item.trades.sort((x, y) => x.T - y.T);
+          dirty.add(sym);
+        } catch (e) { console.warn('Error cargando operaciones de', sym, e); }
+      });
+      const socket = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${syms.map(s => s.toLowerCase() + '@aggTrade').join('/')}`);
+      tradeWs = socket;
+      socket.onmessage = ev => {
+        if (tradeWs !== socket) return;
+        let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        const a = msg.data;
+        if (!a || a.e !== 'aggTrade' || !state[a.s]) return;
+        pushTrade(state[a.s], a);
+        dirty.add(a.s);
+      };
+      socket.onclose = () => {
+        if (tradeWs !== socket) return;
+        tradeWs = null; tradeWsKey = '';
+        if (gen === analysisGen) tradeWsTimeout = setTimeout(syncTradeStream, WS_RECONNECT_MS);
+      };
+      socket.onerror = () => {};
+    }
+
+    // Recalcula los muros contra el precio en vivo (se llama en cada lectura y en cada recálculo)
+    function refreshBook(item) {
+      item.book = analyzeBook(item.bookSnaps, item.price, Date.now());
+      if (!item.book) return;
+      item.obi = item.book.stale ? 0 : item.book.obi;
+      item.askWall = item.book.sides.ask.wall ? item.book.sides.ask.wall.price : 0;
+      item.bidWall = item.book.sides.bid.wall ? item.book.sides.bid.wall.price : 0;
+    }
+
     function startDepthPolling(list, gen) {
       // Un par por vez, en rueda. Los pares en pantalla van primero en cada vuelta.
-      let queue = [];
+      // Rueda alternada: un par en pantalla, un par cualquiera. Los visibles se leen el doble de seguido.
+      let queue = [], visQueue = [], tick = 0;
       const next = async () => {
         if (gen !== analysisGen) return;
-        if (!queue.length) {
-          const vis = activeGridSymbols.filter(s => list.includes(s));
-          queue = vis.concat(list.filter(s => !vis.includes(s)));
-        }
-        const sym = queue.shift();
+        const vis = activeGridSymbols.filter(s => list.includes(s));
+        if (!queue.length) queue = vis.concat(list.filter(s => !vis.includes(s)));
+        if (!visQueue.length) visQueue = vis.slice();
+        const sym = (tick++ % 2 === 0 && visQueue.length) ? visQueue.shift() : queue.shift();
         try {
           const depth = await fetchJSON(`https://api.binance.com/api/v3/depth?symbol=${sym}&limit=${DEPTH_LIMIT}`, 2);
           const item = state[sym];
-          const snap = bookSnapshot(depth, Date.now());
+          const snap = item ? bookSnapshot(depth, Date.now(), item.bookAnchor) : null;
           if (gen === analysisGen && item && snap) {
+            if (!item.bookAnchor) item.bookAnchor = snap.anchor;
             item.bookSnaps.push(snap);
             if (item.bookSnaps.length > BOOK.snaps) item.bookSnaps.shift();
-            item.book = analyzeBook(item.bookSnaps);
-            item.obi = item.book.obi;
-            item.askWall = item.book.sides.ask.wall ? item.book.sides.ask.wall.price : 0;
-            item.bidWall = item.book.sides.bid.wall ? item.book.sides.bid.wall.price : 0;
+            refreshBook(item);
             dirty.add(sym);
           }
         } catch (e) { console.warn("Error de profundidad en", sym, e); }
@@ -2160,6 +2433,8 @@
             budget--;
             btRan = true;
           }
+          if (item.bookSnaps.length) refreshBook(item);
+          if (activeGridSymbols.includes(sym)) item.tradeStats = analyzeTrades(item.trades, now);
           computeLive(item, tf, now);
         } catch (e) { console.warn('Error de cálculo en', sym, e); }
         updateTableRow(sym);
@@ -2187,6 +2462,7 @@
         const changed = manual.join(',') !== activeGridSymbols.join(',') || !document.querySelector('#charts-grid .card');
         activeGridSymbols = manual;
         if (changed) renderChartsGrid(manual.map(s => state[s]), 'manual');
+        syncTradeStream();
         sortTable();
         return;
       }
@@ -2211,6 +2487,7 @@
 
       const top = sorted.slice(0, limit);
       activeGridSymbols = top.map(it => it.symbol);
+      setTimeout(syncTradeStream, 0);
       renderChartsGrid(top, mode);
       sortTable();
     }
@@ -2304,10 +2581,22 @@
       }
 
       const isBull = item.dir > 0;
-      if (badge) { badge.className = `badge ${isBull ? 'badge-bull' : 'badge-bear'}`; badge.innerText = isBull ? 'ALCISTA' : 'BAJISTA'; }
+      if (badge) {
+        if (item.noEdge) {
+          badge.className = 'badge badge-none';
+          badge.innerText = 'SIN VENTAJA';
+          badge.title = `El historial de este par no muestra una ventaja clara en ninguna dirección. Los TP siguen a la tendencia ${HTF_LABEL[HTF_OF[tf]]} (${isBull ? 'alcista' : 'bajista'}).`;
+        } else {
+          badge.className = `badge ${isBull ? 'badge-bull' : 'badge-bear'}`;
+          badge.innerText = isBull ? 'ALCISTA' : 'BAJISTA';
+          badge.title = '';
+        }
+      }
 
       // Métricas
       const chips = [];
+      if (item.conflict) chips.push(metricChip(`⚠ ${item.conflict}`, 'warn',
+        'La probabilidad de corto plazo apunta en contra de la tendencia mayor y de los indicadores: un movimiento así suele ser corto'));
       if (item.rsi != null) {
         const [hiB, loB] = rsiBands(item.rsiP);
         chips.push(metricChip(`RSI${item.rsiP} ${item.rsi.toFixed(0)}`, item.rsi > hiB || item.rsi < loB ? 'warn' : '',
@@ -2324,6 +2613,12 @@
       }
       if (item.htfTrend) chips.push(metricChip(`${HTF_LABEL[HTF_OF[tf]]} ${item.htfTrend > 0 ? '↑' : '↓'}`, item.htfTrend > 0 ? 'up' : 'down', 'Tendencia de la temporalidad mayor (cierre vs EMA 50)'));
       if (item.rs != null) chips.push(metricChip(`vs BTC ${item.rs >= 0 ? '+' : ''}${item.rs.toFixed(1)}%`, item.rs > 0 ? 'up' : 'down', `Rendimiento de las últimas ${CFG.rsBars} velas menos el de BTC`));
+      if (item.tradeStats) {
+        const st = item.tradeStats;
+        if (st.buy.level >= 2 && st.buy.level > st.sell.level) chips.push(metricChip('🐋 Compra grande', 'up', `Compras: ${st.buy.verdict} (${pct(st.buy.bigShare, 0)} del volumen en órdenes grandes)`));
+        if (st.sell.level >= 2 && st.sell.level > st.buy.level) chips.push(metricChip('🐋 Venta grande', 'down', `Ventas: ${st.sell.verdict} (${pct(st.sell.bigShare, 0)} del volumen en órdenes grandes)`));
+      }
+      if (item.vol && item.vol.divergence) chips.push(metricChip(`⚠ ${item.vol.divergence.type}`, 'warn', item.vol.divergence.txt));
       if (item.fvg && item.fvg.inside) {
         const g = item.fvg.inside;
         chips.push(metricChip(`Dentro de FVG ${g.type > 0 ? '↑' : '↓'}`, g.type > 0 ? 'up' : 'down',
@@ -2335,14 +2630,16 @@
 
       // Probabilidad
       const calibrated = item.probCal != null;
-      set(`prob-label-${sym}`, calibrated ? 'Prob. ↑ calibrada' : 'Puntaje (sin calibrar)');
+      set(`prob-label-${sym}`, !calibrated ? 'Puntaje (sin calibrar)' : item.noEdge ? 'Prob. ↑ · sin ventaja histórica' : 'Prob. ↑ calibrada');
       const pv = set(`prob-val-${sym}`, `${item.probBull.toFixed(1)}%`);
-      if (pv) pv.className = isBull ? 'val-up' : 'val-down';
+      if (pv) pv.className = item.noEdge ? 'muted' : (item.probBull >= 50 ? 'val-up' : 'val-down');
       const pf = document.getElementById(`prob-fill-${sym}`);
-      if (pf) pf.style.width = `${item.probBull}%`;
+      if (pf) { pf.style.width = `${item.probBull}%`; pf.style.opacity = item.noEdge ? '0.35' : '1'; }
       const obiTxt = `libro ${item.obi >= 0 ? '+' : ''}${(item.obi * 100).toFixed(0)}%`;
+      const pp = item.probParts;
+      const partsTxt = pp ? `calibración ${pct(pp.cal, 0)}${pp.an != null ? ` · casos parecidos ${pct(pp.an, 0)} (${pp.ups}/${pp.k} subieron)` : ''}` : '';
       set(`prob-sub-${sym}`, calibrated
-        ? `Horizonte ${HORIZON_LABEL[tf]} · puntaje ${item.score.toFixed(0)} (${obiTxt}) · ${item.bt.n} muestras`
+        ? `${HORIZON_LABEL[tf]} · ${partsTxt} · base ${pct(item.bt.fit.base, 0)} · ${obiTxt}`
         : `Historial corto: sin calibración · ${obiTxt}`);
 
       // Objetivos con su tasa histórica de acierto
@@ -2440,7 +2737,7 @@
         btSec = sec('Backtest', [row('Estado', 'historial insuficiente')]);
       }
 
-      el.innerHTML = analogSection(item) + moveSection(item) + majorSection(item) + levels + fvgSection(item) + bookSection(item) + ind + btSec;
+      el.innerHTML = analogSection(item) + moveSection(item) + majorSection(item) + levels + fvgSection(item) + bookSection(item) + volumeSection(item) + ind + btSec;
     }
 
     // Bloque de la tarjeta: probabilidad de tocar +5% / −5% en la ventana
@@ -2472,6 +2769,37 @@
       el.innerHTML =
         box(`Toca +${MOVE.pct}% en ${MOVE.winLabel[tf]}`, m.up, m.upBase, '#0ecb81') +
         box(`Toca −${MOVE.pct}% en ${MOVE.winLabel[tf]}`, m.dn, m.dnBase, '#f6465d');
+    }
+
+    // Sección del panel: volumen operado y flujo de compras/ventas agresivas
+    function volumeSection(item) {
+      const st = item.tradeStats, v = item.vol;
+      const ago = T => { const m = Math.max(0, Math.round((Date.now() - T) / 60000)); return m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : `hace ${(m / 60).toFixed(1)} h`; };
+      let head = '', rows = '';
+      if (!st) {
+        rows = `<div class="book-note">Escuchando operaciones en vivo… (hace falta un mínimo de 30)</div>`;
+      } else {
+        const mins = Math.max(1, Math.round((st.to - st.from) / 60000));
+        head = ` <span class="muted" style="text-transform:none;font-weight:400">· ${mins >= 55 ? 'última hora' : `últimos ${mins} min`} · ${st.n.toLocaleString('es-AR')} oper.</span>`;
+        const sideRow = (lbl, sd, isBuy) => {
+          const cls = sd.level >= 2 ? (isBuy ? 'val-up' : 'val-down') : '';
+          const detail = sd.n
+            ? `${sd.bigN} ${sd.bigN === 1 ? 'orden' : 'órdenes'} ≥ ${fmtUsd(st.thr)} = ${pct(sd.bigShare, 0)} del volumen · mayor ${fmtUsd(sd.top1.usd)} ${ago(sd.top1.T)}`
+            : '';
+          return `<div class="d-row" title="Total ${isBuy ? 'comprado' : 'vendido'} a mercado: ${fmtUsd(sd.total)} en ${sd.n} órdenes"><span class="d-k">${lbl}</span><span class="d-v ${cls}">${sd.verdict}</span></div>
+                  ${detail ? `<div class="book-note">${detail}</div>` : ''}`;
+        };
+        const net = st.bigNet;
+        rows = sideRow('Compras', st.buy, true) + sideRow('Ventas', st.sell, false) +
+          `<div class="d-row" title="Órdenes grandes de compra menos órdenes grandes de venta"><span class="d-k">Neto de los grandes</span><span class="d-v ${net >= 0 ? 'val-up' : 'val-down'}">${net >= 0 ? '+' : '−'}${fmtUsd(Math.abs(net))} <small>${Math.abs(net) < st.thr ? 'equilibrado' : net > 0 ? 'compran' : 'venden'}</small></span></div>`;
+      }
+      // Avisos que se mantienen: divergencia precio/flujo y vela de clímax
+      if (v && v.divergence) rows += `<div class="book-note" style="color:var(--accent-yellow)">⚠ ${v.divergence.type}: ${v.divergence.txt}</div>`;
+      if (v && v.climax) {
+        const c = v.climax;
+        rows += `<div class="d-row" title="Vela con volumen extremo. Una mecha larga del lado opuesto suele indicar agotamiento"><span class="d-k">Clímax</span><span class="d-v ${c.sell ? 'val-down' : 'val-up'}">${c.sell ? 'vendedor' : 'comprador'} hace ${c.ago} v. <small>vol ${c.rel.toFixed(1)}× · mecha ${Math.round(c.wick * 100)}%</small></span></div>`;
+      }
+      return `<div class="d-sec"><div class="d-title">Volumen operado · quién opera${head}</div>${rows}</div>`;
     }
 
     // Sección del panel: soportes y resistencias mayores del historial diario
@@ -2586,26 +2914,29 @@
     // Sección "Libro de órdenes": muros por tramos de 0,5% y distribución del dinero por distancia
     function bookSection(item) {
       const b = item.book;
-      const title = `<div class="d-title">Libro · tramos ${String(BOOK.bucketPct).replace('.', ',')}%${b ? ` <span class="muted" style="text-transform:none;font-weight:400">· ${b.nSnaps} lect.</span>` : ''}</div>`;
+      const age = b ? Math.max(0, Math.round((Date.now() - b.t) / 1000)) : 0;
+      const title = `<div class="d-title">Libro · tramos ${String(BOOK.bucketPct).replace('.', ',')}%${b ? ` <span class="muted" style="text-transform:none;font-weight:400">· ${b.nSnaps} lect. · hace ${age}s</span>` : ''}</div>`;
       if (!b) return `<div class="d-sec">${title}<div class="book-note">Leyendo el libro…</div></div>`;
+      const p = item.price;
       const wallRow = (s, label) => {
         const sd = b.sides[s], cls = s === 'ask' ? 'val-down' : 'val-up';
         if (sd.wall) {
-          const w = sd.wall;
-          return `<div class="d-row" title="${w.ratio.toFixed(1)}× la mediana de los tramos · firme en ${Math.round(w.presence * 100)}% de las lecturas"><span class="d-k">${label}</span><span class="d-v ${cls}">${formatPrice(w.price)} <small>${w.distPct >= 0 ? '+' : ''}${w.distPct.toFixed(1)}% · ${fmtUsd(w.notional)}</small></span></div>`;
+          const w = sd.wall, d = (w.price / p - 1) * 100;
+          return `<div class="d-row" title="Zona ${formatPrice(w.lo)}–${formatPrice(w.hi)} · ${w.ratio.toFixed(1)}× la mediana · firme en ${Math.round(w.presence * 100)}% de las lecturas"><span class="d-k">${label}</span><span class="d-v ${cls}">${formatPrice(w.price)} <small>${d >= 0 ? '+' : ''}${d.toFixed(1)}% · ${fmtUsd(w.notional)}</small></span></div>`;
         }
         const why = sd.reason === 'cobertura' ? `libro hasta ${s === 'ask' ? '+' : '−'}${sd.cover.toFixed(1)}%`
-                  : sd.reason === 'confirmando' ? `confirmando ${b.nSnaps}/${BOOK.minSnaps}` : 'sin muro';
+                  : sd.reason === 'confirmando' ? `confirmando ${b.nSnaps}/${BOOK.minSnaps}`
+                  : sd.reason === 'viejo' ? 'lectura vieja' : 'sin muro';
         return `<div class="d-row"><span class="d-k">${label}</span><span class="d-v"><small>${why}</small></span></div>`;
       };
-      // Histograma compacto: 3 tramos por lado
-      const asks = b.sides.ask.buckets.slice(0, 3), bids = b.sides.bid.buckets.slice(0, 3);
+      // Histograma: 3 tramos por lado, medidos desde el precio actual (última lectura)
+      const asks = b.sides.ask.buckets, bids = b.sides.bid.buckets;
       const maxN = Math.max(...asks.concat(bids).map(x => x.notional), 1);
-      const nf = v => (v % 1 ? v.toFixed(1) : v.toFixed(0)).replace('.', ',');
+      const nf = v => v.toFixed(1).replace('.', ',');
       const bar = (x, s) => {
         const isWall = b.sides[s].wall && b.sides[s].wall.k === x.k;
         const sg = s === 'ask' ? '+' : '−';
-        return `<div class="book-row${isWall ? ' wall' : ''}">
+        return `<div class="book-row${isWall ? ' wall' : ''}" title="${formatPrice(x.lo)} – ${formatPrice(x.hi)}">
                   <span class="book-lbl">${sg}${nf(x.from)}–${nf(x.to)}%${x.partial ? '*' : ''}</span>
                   <span class="book-bar"><i class="${s}" style="width:${(x.notional / maxN * 100).toFixed(1)}%"></i></span>
                   <span class="book-val">${fmtUsd(x.notional)}</span>
@@ -2615,7 +2946,7 @@
       return `<div class="d-sec">${title}
         ${wallRow('ask', 'Muro venta')}
         ${wallRow('bid', 'Muro compra')}
-        <div class="d-row"><span class="d-k">Presión ±${BOOK.nearPct}%</span><span class="d-v ${obi > 0 ? 'val-up' : 'val-down'}">${obi >= 0 ? '+' : ''}${(obi * 100).toFixed(0)}%</span></div>
+        <div class="d-row"><span class="d-k">Presión ±${BOOK.nearPct}%</span><span class="d-v ${b.stale ? '' : obi > 0 ? 'val-up' : 'val-down'}">${b.stale ? '—' : `${obi >= 0 ? '+' : ''}${(obi * 100).toFixed(0)}%`}</span></div>
         <div class="book-bars">${asks.slice().reverse().map(x => bar(x, 'ask')).join('')}${bids.map(x => bar(x, 'bid')).join('')}</div>
       </div>`;
     }
@@ -2680,7 +3011,8 @@
       const cls = item.dir > 0 ? 'val-up' : 'val-down';
       if (probEl) {
         probEl.innerText = `${item.probBull.toFixed(1)}%${item.probCal != null ? '' : ' ⚠'}`;
-        probEl.className = `bold ${cls}`;
+        probEl.className = item.noEdge ? 'bold muted' : `bold ${cls}`;
+        if (item.noEdge) probEl.title = 'Sin ventaja histórica clara';
         probEl.title = item.probCal != null ? '' : 'Sin calibrar: historial corto';
       }
       if (tp1El) { tp1El.innerText = formatPrice(item.tp1); tp1El.className = `mono ${cls}`; }
@@ -2895,8 +3227,16 @@
       const maxV = Math.max(...kl.map(k => k.volume)) || 1;
       kl.forEach((k, i) => {
         const h = (k.volume / maxV) * priceH * 0.18;
-        ctx.fillStyle = k.close >= k.open ? 'rgba(14,203,129,0.18)' : 'rgba(246,70,93,0.18)';
-        ctx.fillRect(i * cw + cw * 0.15, priceH - h, cw * 0.7, h);
+        const x = i * cw + cw * 0.15, w = cw * 0.7;
+        if (k.buy != null && k.volume > 0) {
+          // Abajo la parte de compras agresivas (verde), arriba la de ventas agresivas (rojo)
+          const hb = h * (k.buy / k.volume);
+          ctx.fillStyle = 'rgba(14,203,129,0.32)'; ctx.fillRect(x, priceH - hb, w, hb);
+          ctx.fillStyle = 'rgba(246,70,93,0.32)'; ctx.fillRect(x, priceH - h, w, h - hb);
+        } else {
+          ctx.fillStyle = k.close >= k.open ? 'rgba(14,203,129,0.18)' : 'rgba(246,70,93,0.18)';
+          ctx.fillRect(x, priceH - h, w, h);
+        }
       });
 
       const hLine = (p, color, w, dash) => {
@@ -2917,6 +3257,20 @@
       hLine(item.weeklySR.resistance, '#9c27b0', 1.2, [3, 3]);
       hLine(item.weeklySR.support, '#9c27b0', 1.2, [3, 3]);
       if (item.vp) hLine(item.vp.poc, '#ff9800', 1.4, [1, 3]);
+
+      // Órdenes grandes de la última hora: punto en su precio y su vela (verde compra, rojo venta)
+      if (item.tradeStats && item.tradeStats.bigTrades.length) {
+        const tfMs = TF_MS[currentTimeframe], t0 = kl[0].time, thr = item.tradeStats.thr;
+        item.tradeStats.bigTrades.forEach(t => {
+          const idx = Math.floor((t.T - t0) / tfMs);
+          if (idx < 0 || idx >= kl.length || t.p < minP || t.p > maxP) return;
+          const r = clamp(Math.sqrt(t.usd / thr) * 2.6, 2.5, 9) * dpr;
+          const x = idx * cw + cw / 2, yy = getY(t.p);
+          ctx.beginPath(); ctx.arc(x, yy, r, 0, Math.PI * 2);
+          ctx.fillStyle = t.buy ? 'rgba(14,203,129,0.55)' : 'rgba(246,70,93,0.55)'; ctx.fill();
+          ctx.strokeStyle = t.buy ? '#0ecb81' : '#f6465d'; ctx.lineWidth = 1; ctx.stroke();
+        });
+      }
 
       // Niveles mayores: línea si están a la vista, marca en el borde si quedan fuera
       if (item.majorNear) {
@@ -2973,9 +3327,7 @@
         [['ask', 'rgba(246,70,93,'], ['bid', 'rgba(14,203,129,']].forEach(([s, c]) => {
           const w = item.book.sides[s].wall;
           if (!w) return;
-          const sg = s === 'ask' ? 1 : -1;
-          const pA = item.book.mid * (1 + sg * w.from / 100), pB = item.book.mid * (1 + sg * w.to / 100);
-          const lo = Math.max(Math.min(pA, pB), minP), hi = Math.min(Math.max(pA, pB), maxP);
+          const lo = Math.max(w.lo, minP), hi = Math.min(w.hi, maxP);   // tramo absoluto del muro
           if (hi <= lo) return;
           ctx.fillStyle = c + '0.10)';
           ctx.fillRect(0, getY(hi), plotW, getY(lo) - getY(hi));
@@ -3108,9 +3460,10 @@
         const rv = ser ? ser.relVol[start + idx] : null;
         const h = ser ? ser.hist[start + idx] : null;
         const chg = (k.close / k.open - 1) * 100;
+        const bpTxt = k.buy != null && k.volume > 0 ? ` | Compras ${Math.round(k.buy / k.volume * 100)}%` : '';
         const d = new Date(k.time).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
         tooltip.style.display = 'block';
-        tooltip.innerText = `[${d}] O:${formatPrice(k.open)} H:${formatPrice(k.high)} L:${formatPrice(k.low)} C:${formatPrice(k.close)} (${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%) | RSI ${r === null ? '—' : r.toFixed(1)} | MACD ${h == null ? '—' : (h > 0 ? '+' : '−')} | Vol ${rv == null ? '—' : rv.toFixed(1) + 'x'}`;
+        tooltip.innerText = `[${d}] O:${formatPrice(k.open)} H:${formatPrice(k.high)} L:${formatPrice(k.low)} C:${formatPrice(k.close)} (${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%) | RSI ${r === null ? '—' : r.toFixed(1)} | MACD ${h == null ? '—' : (h > 0 ? '+' : '−')} | Vol ${rv == null ? '—' : rv.toFixed(1) + 'x'}${bpTxt}`;
       };
       canvas.onmouseleave = () => { if (tooltip) tooltip.style.display = 'none'; };
     }
