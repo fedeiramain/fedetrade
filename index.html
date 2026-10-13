@@ -25,6 +25,7 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { overflow-anchor: none; }   /* la página compensa el scroll por su cuenta (withScrollAnchor) */
     body {
       background-color: var(--bg-main);
       color: var(--text-main);
@@ -344,7 +345,7 @@
 
   <div class="controls-bar">
     <div class="controls-group">
-      <label>Rotación de Tarjetas:</label>
+      <label title="Cada cuánto se reordena el resumen del portafolio. Las tarjetas de gráficos no se mueven.">Reordenar resumen:</label>
       <select id="refresh-rate" onchange="changeRefreshInterval(this.value)">
         <option value="15">Cada 15 Segundos</option>
         <option value="30" selected>Cada 30 Segundos</option>
@@ -366,7 +367,6 @@
       <select id="filter-mode" onchange="reorderAndRenderGrid()">
         <option value="abs">Mayor Fuerza Absoluta</option>
         <option value="edge">Mejor Rendimiento Histórico</option>
-        <option value="random">Itinerancia / Selección Aleatoria</option>
         <option value="bull">Solo Alcistas</option>
         <option value="bear">Solo Bajistas</option>
       </select>
@@ -2057,13 +2057,44 @@
       updateTimerBadge();
     }
 
+    let lastUserScroll = 0, ignoreScrollUntil = 0;
+    const USER_IDLE_MS = 15000;
+    ['scroll', 'touchstart', 'wheel'].forEach(ev => window.addEventListener(ev, () => {
+      if (ev === 'scroll' && Date.now() < ignoreScrollUntil) return;   // scroll hecho por la página, no por el usuario
+      lastUserScroll = Date.now();
+    }, { passive: true }));
+
+    function pageScrollBy(dy) {
+      if (Math.abs(dy) < 1) return;
+      ignoreScrollUntil = Date.now() + 150;
+      window.scrollBy(0, dy);
+    }
+
+    // Ejecuta una actualización de la pantalla sin mover lo que el usuario está mirando: toma como
+    // referencia el primer bloque fijo visible (que no se reemplaza al actualizar) y lo mantiene en su lugar.
+    const ANCHOR_SEL = '#charts-grid .card > .card-header, #charts-grid .card > .metrics, #charts-grid .canvas-wrapper, ' +
+                       '#charts-grid .bt-foot, #charts-grid .side-top, #charts-grid .details-cols, #summary-panel';
+    function withScrollAnchor(fn) {
+      if (window.scrollY <= 0) return fn();
+      let anchor = null, top0 = 0;
+      for (const el of document.querySelectorAll(ANCHOR_SEL)) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom > 0) { anchor = el; top0 = r.top; break; }
+      }
+      const out = fn();
+      if (anchor && anchor.isConnected) pageScrollBy(anchor.getBoundingClientRect().top - top0);
+      return out;
+    }
+
     function startCountdownTimer() {
       if (timerInterval) clearInterval(timerInterval);
       timerInterval = setInterval(() => {
         countdownSeconds--;
         if (countdownSeconds <= 0) {
-          // Con selección manual los gráficos no rotan: solo se reordena la tabla
-          if (selectedSymbols().length) sortTable(); else reorderAndRenderGrid();
+          // Si el usuario está haciendo scroll o tocando la pantalla, la rotación espera
+          if (Date.now() - lastUserScroll < USER_IDLE_MS) { countdownSeconds = 3; return; }
+          // Solo se reordena el resumen del portafolio: las tarjetas de gráficos mantienen su lugar
+          sortTable();
           countdownSeconds = refreshIntervalSeconds;
         }
         updateTimerBadge();
@@ -2421,6 +2452,7 @@
       if (!dirty.size) return;
       const tf = currentTimeframe, now = Date.now(), btcKl = getBtcKlines();
       let budget = MAX_BT_PER_FLUSH, btRan = false;
+      withScrollAnchor(() => {
       for (const sym of Array.from(dirty)) {
         dirty.delete(sym);
         const item = state[sym];
@@ -2440,6 +2472,7 @@
         updateTableRow(sym);
         if (activeGridSymbols.includes(sym)) updateSingleCard(sym);
       }
+      });
       needBt.forEach(s => dirty.add(s));   // los backtests pendientes van en el próximo ciclo
       if (btRan && document.getElementById('bt-overlay').classList.contains('active')) renderBacktestModal();
     }
@@ -2447,6 +2480,24 @@
     // ============================================================
     // GRILLA DE TARJETAS
     // ============================================================
+    // Ranking usado solo para ELEGIR qué gráficos mostrar en modo automático
+    function rankForGrid(allItems, mode) {
+      let sorted = allItems.slice();
+      if (mode === 'bull') sorted = sorted.filter(it => it.ready && it.probBull >= 50).sort((a, b) => b.probBull - a.probBull);
+      else if (mode === 'bear') sorted = sorted.filter(it => it.ready && it.probBull < 50).sort((a, b) => a.probBull - b.probBull);
+      else if (mode === 'edge') {
+        const edge = it => (it.bt && it.bt.strong) ? it.bt.strong.net : -Infinity;
+        sorted.sort((a, b) => edge(b) - edge(a));
+      } else sorted.sort((a, b) => (b.ready ? Math.abs(b.probBull - 50) : -1) - (a.ready ? Math.abs(a.probBull - 50) : -1));
+      return sorted;
+    }
+
+    let autoGrid = [], autoGridKey = '';
+    try {
+      const g = JSON.parse(localStorage.getItem('crypto_auto_grid') || 'null');
+      if (g && Array.isArray(g.syms)) { autoGrid = g.syms; autoGridKey = g.key || ''; }
+    } catch (e) {}
+
     function reorderAndRenderGrid() {
       const allItems = Object.values(state);
       if (!allItems.length) return;
@@ -2466,50 +2517,44 @@
         sortTable();
         return;
       }
-      modeEl.innerText = 'Automático · tildá pares en el resumen para elegir qué gráficos ver';
+      modeEl.innerText = 'Automático (fijo) · tildá pares en el resumen para elegir qué gráficos ver';
 
-      let sorted = allItems.slice();
-      if (mode === 'random') {
-        for (let i = sorted.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [sorted[i], sorted[j]] = [sorted[j], sorted[i]];
-        }
-      } else if (mode === 'bull') {
-        sorted = sorted.filter(it => it.ready && it.probBull >= 50).sort((a, b) => b.probBull - a.probBull);
-      } else if (mode === 'bear') {
-        sorted = sorted.filter(it => it.ready && it.probBull < 50).sort((a, b) => a.probBull - b.probBull);
-      } else if (mode === 'edge') {
-        const edge = it => (it.bt && it.bt.strong) ? it.bt.strong.net : -Infinity;
-        sorted.sort((a, b) => edge(b) - edge(a));
-      } else {
-        sorted.sort((a, b) => (b.ready ? Math.abs(b.probBull - 50) : -1) - (a.ready ? Math.abs(a.probBull - 50) : -1));
+      // Las tarjetas no se reordenan: se eligen al cambiar el filtro o la cantidad (o la primera vez)
+      // y después mantienen su lugar aunque cambien los datos. Solo el resumen se reordena.
+      const key = `${mode}|${limit}`;
+      let syms = autoGrid.filter(sym => state[sym]);
+      if (key !== autoGridKey || !syms.length) {
+        syms = rankForGrid(allItems, mode).slice(0, limit).map(it => it.symbol);
+        autoGridKey = key;
+      } else if (syms.length < limit) {
+        // Si se sacó un par del portafolio, se completa al final sin mover los que ya están
+        rankForGrid(allItems, mode).forEach(it => { if (syms.length < limit && !syms.includes(it.symbol)) syms.push(it.symbol); });
       }
+      autoGrid = syms;
+      try { localStorage.setItem('crypto_auto_grid', JSON.stringify({ key: autoGridKey, syms })); } catch (e) {}
 
-      const top = sorted.slice(0, limit);
-      activeGridSymbols = top.map(it => it.symbol);
+      const same = syms.join(',') === activeGridSymbols.join(',') && document.querySelector('#charts-grid .card');
+      activeGridSymbols = syms;
       setTimeout(syncTradeStream, 0);
-      renderChartsGrid(top, mode);
+      if (!same) renderChartsGrid(syms.map(x => state[x]), mode);
       sortTable();
     }
 
-    function renderChartsGrid(items, mode) {
-      const container = document.getElementById('charts-grid');
-      container.innerHTML = '';
-      if (!items.length) {
-        const msg = document.createElement('div');
-        msg.className = 'empty-msg';
-        msg.textContent = mode === 'manual' ? 'Ninguno de los pares tildados tiene datos todavía.'
-                        : mode === 'bull' ? 'No hay monedas alcistas en este momento.'
-                        : mode === 'bear' ? 'No hay monedas bajistas en este momento.'
-                        : 'Sin datos para mostrar.';
-        container.appendChild(msg);
-        return;
+    // La tarjeta del gráfico que el usuario está mirando y su posición en pantalla
+    function scrollAnchor(container) {
+      const cards = container.querySelectorAll(':scope > .card');
+      for (const c of cards) {
+        const r = c.getBoundingClientRect();
+        if (r.bottom > 60) return { sym: c.dataset.sym, top: r.top };
       }
-      items.forEach(item => {
-        const s = item.symbol;
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.id = `card-${s}`;
+      return null;
+    }
+
+    function buildCard(s) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.id = `card-${s}`;
+      card.dataset.sym = s;
         card.innerHTML = `
           <div class="card-header">
             <div>
@@ -2549,9 +2594,48 @@
             </div>
           </div>
         `;
-        container.appendChild(card);
-        updateSingleCard(s);
+      return card;
+    }
+
+    // Arma la grilla reutilizando las tarjetas existentes: nunca la vacía (vaciarla achica la página y
+    // el navegador sube el scroll). Si la tarjeta que se estaba mirando cambia de lugar, la vista la sigue.
+    function renderChartsGrid(items, mode) {
+      const container = document.getElementById('charts-grid');
+      const anchor = window.scrollY > 0 ? scrollAnchor(container) : null;
+      const y0 = window.scrollY;
+      container.style.minHeight = container.offsetHeight + 'px';
+      container.querySelectorAll(':scope > .empty-msg').forEach(e => e.remove());
+      if (!items.length) {
+        container.querySelectorAll(':scope > .card').forEach(c => c.remove());
+        const msg = document.createElement('div');
+        msg.className = 'empty-msg';
+        msg.textContent = mode === 'manual' ? 'Ninguno de los pares tildados tiene datos todavía.'
+                        : mode === 'bull' ? 'No hay monedas alcistas en este momento.'
+                        : mode === 'bear' ? 'No hay monedas bajistas en este momento.'
+                        : 'Sin datos para mostrar.';
+        container.appendChild(msg);
+        container.style.minHeight = '';
+        return;
+      }
+      const existing = new Map([...container.querySelectorAll(':scope > .card')].map(c => [c.dataset.sym, c]));
+      const frag = document.createDocumentFragment(), fresh = [];
+      items.forEach(item => {
+        const s = item.symbol;
+        let card = existing.get(s);
+        if (card) existing.delete(s);
+        else { card = buildCard(s); fresh.push(s); }
+        frag.appendChild(card);
       });
+      existing.forEach(c => c.remove());
+      container.appendChild(frag);
+      fresh.forEach(s => updateSingleCard(s));   // se dibujan con la grilla ya completa
+      container.style.minHeight = '';
+      // Mantener la vista: misma moneda en la misma posición, o el mismo scroll si esa moneda ya no está
+      if (anchor) {
+        const c = document.getElementById(`card-${anchor.sym}`);
+        if (c) pageScrollBy(c.getBoundingClientRect().top - anchor.top);
+        else { ignoreScrollUntil = Date.now() + 150; window.scrollTo(0, y0); }
+      }
     }
 
     function metricChip(text, cls, title) {
