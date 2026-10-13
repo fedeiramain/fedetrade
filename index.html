@@ -98,15 +98,47 @@
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
     .legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; }
 
-    .dashboard-grid { display: grid; grid-template-columns: 1fr 430px; gap: 16px; }
+    .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 16px; transition: grid-template-columns 0.25s ease; }
+    .dashboard-grid.summary-collapsed { grid-template-columns: minmax(0, 1fr) 40px; }
+
+    /* Encabezado del resumen con la flecha para plegarlo */
+    .summary-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    .summary-head h2 { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .collapse-btn {
+      flex: none; width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+      background: var(--bg-main); color: var(--text-main); border: 1px solid var(--border-color);
+      font-size: 1rem; font-weight: 700; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .collapse-btn:hover { border-color: var(--accent-blue); color: #fff; }
+    .summary-strip { display: none; }
+    .summary-collapsed .table-container { padding: 6px 4px; overflow: hidden; cursor: pointer; }
+    .summary-collapsed .table-container > .summary-head,
+    .summary-collapsed .table-container > table { display: none; }
+    .summary-collapsed .summary-strip {
+      display: flex; flex-direction: column; align-items: center; gap: 12px; height: 100%;
+    }
+    .summary-strip .strip-label {
+      writing-mode: vertical-rl; transform: rotate(180deg);
+      color: var(--text-muted); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; white-space: nowrap;
+    }
     .charts-container { display: grid; grid-template-columns: 1fr; gap: 16px; }
     .grid-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
     .grid-mode { font-size: 0.75rem; color: var(--text-muted); }
     .grid-mode a { color: var(--accent-blue); cursor: pointer; text-decoration: underline; }
 
-    .card-body { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 16px; }
-    .side-col { border-left: 1px solid var(--border-color); padding-left: 14px; min-width: 0; }
-    .d-sec { margin-bottom: 12px; }
+    /* Tarjeta: gráfico de velas 30% | datos 70% en columnas */
+    .card-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+    .chart-col { min-width: 0; }
+    .side-col { border-left: 1px solid var(--border-color); padding-left: 16px; min-width: 0; container-type: inline-size; }
+    .side-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 0 12px; margin-bottom: 10px; }
+    .side-top .prob-bar-container { grid-column: 1 / -1; }
+    .side-top .move-box, .side-top .tp-box { margin-bottom: 0; }
+    .details-cols { columns: 230px; column-gap: 20px; column-rule: 1px solid #22272e; }
+    .d-sec { margin-bottom: 12px; break-inside: avoid; }
+    /* Si la columna de datos es angosta, los recuadros van uno debajo del otro */
+    @container (max-width: 820px) {
+      .side-top { grid-template-columns: 1fr; gap: 8px; }
+    }
     .d-title {
       font-size: 0.66rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
       letter-spacing: 0.04em; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #22272e;
@@ -118,7 +150,7 @@
 
     .book-note { font-size: 0.66rem; color: var(--text-muted); margin: 0 0 4px; }
     .book-bars { margin: 6px 0 4px; }
-    .book-row { display: grid; grid-template-columns: 74px 1fr 56px; gap: 6px; align-items: center; font-size: 0.66rem; padding: 1px 2px; border-radius: 3px; }
+    .book-row { display: grid; grid-template-columns: 58px 1fr 52px; gap: 6px; align-items: center; font-size: 0.64rem; padding: 0 2px; border-radius: 3px; line-height: 1.5; }
     .book-row.wall { background: rgba(240, 185, 11, 0.12); outline: 1px solid rgba(240, 185, 11, 0.35); }
     .book-lbl { color: var(--text-muted); font-family: var(--font-mono); }
     .book-val { font-family: var(--font-mono); text-align: right; }
@@ -127,6 +159,20 @@
     .book-bar i.ask { background: rgba(246, 70, 93, 0.7); }
     .book-bar i.bid { background: rgba(14, 203, 129, 0.7); }
     .book-mid { font-size: 0.64rem; color: var(--accent-yellow); text-align: center; border-top: 1px dashed #3a3f47; border-bottom: 1px dashed #3a3f47; margin: 3px 0; padding: 1px 0; font-family: var(--font-mono); }
+
+    .move-box { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .move-item { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); border-radius: 6px; padding: 6px 8px; }
+    .move-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.72rem; }
+    .move-top b { font-family: var(--font-mono); font-size: 0.95rem; }
+    .move-bar { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; margin: 4px 0 3px; overflow: hidden; }
+    .move-bar i { display: block; height: 100%; }
+    .move-sub { font-size: 0.64rem; color: var(--text-muted); }
+
+    .case-row { padding: 5px 0; border-bottom: 1px dashed #22272e; font-size: 0.72rem; }
+    .case-top { display: flex; justify-content: space-between; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.68rem; }
+    .case-sim { color: var(--accent-yellow); }
+    .case-out { margin-top: 2px; }
+    .case-out small { color: var(--text-muted); font-size: 0.64rem; }
 
     td.sel, th.sel { width: 22px; text-align: center; }
     input[type=checkbox] { accent-color: var(--accent-blue); width: 14px; height: 14px; cursor: pointer; }
@@ -265,12 +311,16 @@
     .bt-notes li { margin-left: 18px; margin-bottom: 4px; }
 
     @media (max-width: 1250px) {
-      .dashboard-grid { grid-template-columns: 1fr; }
+      .dashboard-grid, .dashboard-grid.summary-collapsed { grid-template-columns: 1fr; }
       .table-container { height: 420px; }
+      .summary-collapsed .table-container { height: auto; }
+      .summary-collapsed .summary-strip { flex-direction: row; justify-content: flex-start; padding: 2px 6px; }
+      .summary-strip .strip-label { writing-mode: horizontal-tb; transform: none; }
     }
     @media (max-width: 900px) {
       .card-body { grid-template-columns: 1fr; }
       .side-col { border-left: none; padding-left: 0; border-top: 1px solid var(--border-color); padding-top: 10px; }
+      .side-top { grid-template-columns: 1fr; gap: 8px; }
       .canvas-wrapper { height: 340px; }
     }
   </style>
@@ -346,14 +396,16 @@
   <div class="legend">
     <span><i style="border-color: var(--accent-cyan)"></i>S/R por pivotes (más opaco = más toques)</span>
     <span><i style="border-color: var(--accent-purple); border-top-style: dashed"></i>S/R semanal</span>
+    <span><i style="border-color: var(--accent-yellow); border-top-style: dashed; border-top-width: 2px"></i>Nivel mayor (diario) · ▲▼ fuera de la vista</span>
     <span><i style="border-color: var(--accent-orange); border-top-style: dotted"></i>POC (perfil de volumen)</span>
     <span><i style="border-color: rgba(246,70,93,0.55); border-top-width: 8px; opacity: 0.6"></i>Zona de muro del libro (tramo de 0,5%)</span>
+    <span><i style="border: 1px solid rgba(14,203,129,0.6); background: rgba(14,203,129,0.15); height: 8px"></i>FVG abierto (verde alcista, rojo bajista)</span>
     <span><i style="border-color: rgba(234,236,239,0.55)"></i>VWAP</span>
     <span><i style="border-color: var(--accent-green); border-top-style: dashed"></i>TP1 / TP2</span>
     <span><i style="border-color: #b0b8c4; border-top-style: dashed"></i>SL</span>
   </div>
 
-  <div class="dashboard-grid">
+  <div class="dashboard-grid" id="dashboard-grid">
     <div>
       <div class="grid-head">
         <h2 style="font-size: 1rem;" id="grid-title">Gráficos en Temporalidad: 15 Minutos</h2>
@@ -362,8 +414,15 @@
       <div id="charts-grid" class="charts-container"></div>
     </div>
 
-    <div class="table-container">
-      <h2 style="font-size: 1rem; margin-bottom: 12px;">Resumen del Portafolio (En vivo)</h2>
+    <div class="table-container" id="summary-panel">
+      <div class="summary-head">
+        <h2>Resumen del Portafolio (En vivo)</h2>
+        <button class="collapse-btn" onclick="toggleSummary(true)" title="Plegar el resumen para ganar espacio">›</button>
+      </div>
+      <div class="summary-strip" onclick="toggleSummary(false)" title="Abrir el resumen del portafolio">
+        <button class="collapse-btn" title="Abrir el resumen">‹</button>
+        <span class="strip-label">Resumen del portafolio · <span id="strip-count">0</span> pares</span>
+      </div>
       <table>
         <thead>
           <tr>
@@ -374,6 +433,7 @@
             <th title="Probabilidad calibrada de que el precio esté más arriba al cierre del horizonte">Prob. ↑</th>
             <th>TP1</th>
             <th title="% de veces que el TP1 se alcanzó antes que el SL en el historial">Hit TP1</th>
+            <th title="Probabilidad de tocar +5% / −5% dentro de la ventana, según los momentos del historial más parecidos al actual">±5% ↑/↓</th>
           </tr>
         </thead>
         <tbody id="table-body"></tbody>
@@ -434,6 +494,7 @@
               <th title="TP1 / TP2 / TP3 alcanzados antes del SL, en señales bajistas">TP bajistas</th>
               <th title="Retorno medio al cierre del horizonte, en la dirección de la señal, descontando comisiones. Solo señales con puntaje ≥60 o ≤40">Ret. neto señales fuertes</th>
               <th title="Skill fuera de muestra con cada período de RSI. ✓ = el que está en uso para ese par">RSI 9 vs 14</th>
+              <th title="Tasa general de tocar +5% / −5% en la ventana, y skill fuera de muestra de la búsqueda de casos parecidos">±5% ↑/↓ (skill)</th>
             </tr>
           </thead>
           <tbody id="bt-body"></tbody>
@@ -444,7 +505,7 @@
       <ul class="bt-notes">
         <li>Cada vela pasada se evalúa solo con información disponible en ese momento: indicadores, pivotes ya confirmados y la tendencia de la temporalidad mayor ya cerrada.</li>
         <li>La "Prob. ↑" de las tarjetas sale de esta tabla: es la frecuencia real con que el precio subió cuando el puntaje técnico estuvo en ese mismo rango, suavizada hacia la tasa base cuando hay pocas muestras.</li>
-        <li>El libro de órdenes no tiene historial público, así que no entra en el backtest: solo ajusta el "puntaje" en vivo. Los TP del backtest usan pivotes y ATR; los TP en vivo además usan perfil de volumen, S/R semanal y muros del libro.</li>
+        <li>El libro de órdenes no tiene historial público, así que no entra en el backtest: solo ajusta el "puntaje" en vivo. Los TP del backtest usan pivotes, FVG abiertos y ATR; los TP en vivo además usan perfil de volumen, S/R semanal y muros del libro.</li>
         <li>Si en una misma vela se tocan el TP y el SL, se cuenta como SL (criterio conservador). Las muestras se solapan, así que el tamaño efectivo es menor que el número mostrado.</li>
         <li>Un buen resultado pasado no garantiza resultados futuros. Esto no es asesoramiento financiero.</li>
       </ul>
@@ -821,8 +882,11 @@
       if (last - CFG.warmup < 200 + H) return null;
 
       const piv = findPivots(kl, CFG.pivotK, last);
-      const recs = [];
-      let lo = 0, hi = 0;
+      // FVG de todo el historial, con la vela en que se cerraron (para saber si seguían abiertos en t)
+      const gaps = findFVGs(kl, ser.atr, 2, last).map(g => ({ ...g, filledAt: trackFVG(g, kl, last).filledAt }));
+      const recs = [], moves = [];
+      const MV = MOVE.win[tf];
+      let lo = 0, hi = 0, glo = 0, ghi = 0;
 
       for (let t = CFG.warmup; t + H <= last; t++) {
         const s = scoreAt(ser, t);
@@ -840,10 +904,23 @@
           if (kl[j].low < mn) mn = kl[j].low;
         }
         levels.push(mx, mn);
+        // FVG abiertos en t: bordes y punto medio (CE) como niveles
+        while (ghi < gaps.length && gaps[ghi].i <= t) ghi++;
+        while (glo < ghi && gaps[glo].i < t - FVG.lookback) glo++;
+        for (let q = glo; q < ghi; q++) {
+          const g = gaps[q];
+          if (g.filledAt != null && g.filledAt <= t) continue;
+          levels.push(g.top, g.bot, (g.top + g.bot) / 2);
+        }
 
         const dir = s >= 50 ? 1 : -1;
         const price = kl[t].close;
-        const lv = computeTargets(dir, price, atr, levels, regimeMult(atrRankAt(ser, t, CFG.atrPctLookback)));
+        const rank = atrRankAt(ser, t, CFG.atrPctLookback);
+        const lv = computeTargets(dir, price, atr, levels, regimeMult(rank));
+        if (t + MV <= last) {
+          const f = analogFeatures(kl, ser, t, rank);
+          moves.push({ t, time: kl[t].time, rb: regimeBucket(rank), sb: sideBucket(s), f, ...moveOutcome(kl, t, MV, MOVE.pct) });
+        }
         const tps = [lv.tp1, lv.tp2, lv.tp3];
         const hit = [false, false, false];
         let barsTo1 = null;
@@ -917,6 +994,9 @@
 
       return {
         n: recs.length, H, fit, oos, tp, strong, trainSkill,
+        fvg: fvgFillStats(kl, ser.atr, CFG.warmup, last, FVG.fillWinMult * H),
+        move: moveStats(moves, MV),
+        analog: buildAnalog(moves, MV),
         from: kl[recs[0].t].time, to: kl[recs[recs.length - 1].t].time
       };
     }
@@ -944,6 +1024,13 @@
       const bt = item.bt;
       item.probCal = (bt && bt.n >= CFG.minCalibN) ? calibrate(sTech, bt.fit) * 100 : null;
       item.probBull = item.probCal != null ? item.probCal : item.score;
+      item.analog = (bt && bt.analog)
+        ? findAnalogs(bt.analog.rows, analogFeatures(kl, ser, i - 1, atrRankAt(ser, i - 1, CFG.atrPctLookback)), bt.analog.scale, bt.analog.M)
+        : null;
+      item.move = (bt && bt.move)
+        ? { ...predictMove(bt.move.fit, regimeBucket(atrRankAt(ser, i, CFG.atrPctLookback)), sideBucket(sTech)),
+            rb: regimeBucket(atrRankAt(ser, i, CFG.atrPctLookback)), sb: sideBucket(sTech) }
+        : null;
       const dir = item.probBull >= 50 ? 1 : -1;
       item.dir = dir;
 
@@ -958,7 +1045,23 @@
       item.clusters = clusterLevels(piv.map(p => p.price), 0.6 * atr);
       item.vp = volumeProfile(kl, CFG.vpBars, CFG.vpBins);
 
+      // FVG abiertos: el más cercano de cada tipo y si el precio está dentro de alguno
+      const fvgs = openFVGs(kl, ser.atr, i);
+      const near = (arr, cmp) => arr.sort(cmp)[0] || null;
+      item.fvg = {
+        open: fvgs,
+        bullBelow: near(fvgs.filter(g => g.type > 0 && g.remBot < price), (a, b) => b.remTop - a.remTop),
+        bearAbove: near(fvgs.filter(g => g.type < 0 && g.remTop > price), (a, b) => a.remBot - b.remBot),
+        inside: fvgs.find(g => price >= g.remBot && price <= g.remTop) || null,
+        nBull: fvgs.filter(g => g.type > 0).length,
+        nBear: fvgs.filter(g => g.type < 0).length
+      };
+
       const daily = tf === '1d' ? kl : item.dailyKlines;
+      // Niveles mayores: se recalculan solo cuando cambia el historial diario
+      const mKey = daily && daily.length ? `${daily.length}:${daily[daily.length - 1].time}` : '';
+      if (mKey !== item.majorKey) { item.major = computeMajorLevels(daily); item.majorKey = mKey; }
+      item.majorNear = majorAround(item.major, price);
       if (daily && daily.length) {
         const d7 = daily.slice(-7);
         item.weeklySR = { resistance: Math.max(...d7.map(b => b.high)), support: Math.min(...d7.map(b => b.low)) };
@@ -977,6 +1080,8 @@
 
       const levels = item.clusters.map(c => c.price);
       if (item.vp) levels.push(item.vp.poc, ...item.vp.hvn);
+      fvgs.forEach(g => levels.push(g.remTop, g.remBot, g.mid));
+      if (item.majorNear) item.majorNear.below.concat(item.majorNear.above).forEach(l => levels.push(l.price));
       if (item.weeklySR.resistance > 0) levels.push(item.weeklySR.resistance);
       if (item.weeklySR.support > 0) levels.push(item.weeklySR.support);
       const wall = dir > 0 ? item.askWall : item.bidWall;
@@ -995,8 +1100,357 @@
         clusters: [], vp: null, sr: null, weeklySR: { resistance: 0, support: 0 },
         tp1: 0, tp2: 0, tp3: 0, sl: 0, ready: false, loadError: null,
         bookSnaps: [], book: null,
-        rsiP: 14, btBy: null
+        rsiP: 14, btBy: null, fvg: null, move: null, analog: null, major: null, majorKey: '', majorNear: null
       };
+    }
+
+    // ---------------- Niveles mayores (historial diario completo) ----------------
+    const MAJOR = {
+      pivotK: 5,          // pivote diario: máximo/mínimo con 5 días a cada lado
+      tolPct: 1.5,        // niveles a menos de 1,5% se agrupan en una misma zona
+      vpBins: 80,
+      show: 3,            // soportes y resistencias mostrados por lado
+      minStrength: 2,
+      relStrength: 0.3    // fuerza mínima relativa a la zona más fuerte del mismo lado
+    };
+
+    function computeMajorLevels(daily) {
+      if (!daily || daily.length < 30) return null;
+      const n = daily.length, last = n - 2;            // la vela diaria en curso no confirma pivotes
+      const cands = [];
+      for (const pv of findPivots(daily, MAJOR.pivotK, last)) cands.push({ price: pv.price, w: 1, src: 'pivote', piv: 1 });
+      const vp = volumeProfile(daily, n, MAJOR.vpBins);
+      if (vp) {
+        cands.push({ price: vp.poc, w: 3, src: 'POC' });
+        vp.hvn.forEach(h => cands.push({ price: h, w: 2, src: 'volumen' }));
+      }
+      let ath = -Infinity, atl = Infinity, h52 = -Infinity, l52 = Infinity;
+      daily.forEach((b, i) => {
+        if (b.high > ath) ath = b.high;
+        if (b.low < atl) atl = b.low;
+        if (i >= n - 365) { if (b.high > h52) h52 = b.high; if (b.low < l52) l52 = b.low; }
+      });
+      cands.push({ price: ath, w: 2, src: 'máx. histórico' }, { price: atl, w: 2, src: 'mín. histórico' });
+      if (h52 < ath) cands.push({ price: h52, w: 1, src: 'máx. 52 sem.' });
+      if (l52 > atl) cands.push({ price: l52, w: 1, src: 'mín. 52 sem.' });
+      // Números redondos cerca del precio (1.000, 1.500, …): pesan más si coinciden con otra cosa
+      const ref = daily[n - 1].close;
+      const step = Math.pow(10, Math.floor(Math.log10(ref)));
+      for (const [st, w, major] of [[step, 1.5, true], [step / 2, 0.75, false]]) {
+        for (let v = Math.ceil(ref * 0.4 / st) * st; v <= ref * 1.8; v += st) {
+          if (!major && Math.abs(v / step - Math.round(v / step)) < 1e-9) continue;   // ya está como redondo mayor
+          cands.push({ price: v, w, src: 'redondo', round: v, majorRound: major });
+        }
+      }
+      // Densidad de candidatos sobre el precio (escala logarítmica): cada candidato suma su peso
+      // en un entorno de ±tol. Los picos de esa densidad son las zonas donde coinciden varias razones.
+      const sig = Math.log(1 + MAJOR.tolPct / 100) / 1.5, stepX = 0.0025;
+      let lo = Infinity, hi = -Infinity;
+      for (const c of cands) { if (c.price < lo) lo = c.price; if (c.price > hi) hi = c.price; }
+      const x0 = Math.log(lo) - 3 * sig, nCell = Math.ceil((Math.log(hi) + 3 * sig - x0) / stepX) + 1;
+      const dens = new Float64Array(nCell);
+      for (const c of cands) {
+        const xc = Math.log(c.price), cMid = Math.round((xc - x0) / stepX), span = Math.ceil(3 * sig / stepX);
+        for (let k = Math.max(0, cMid - span); k <= Math.min(nCell - 1, cMid + span); k++) {
+          const z = (x0 + k * stepX - xc) / sig;
+          dens[k] += c.w * Math.exp(-0.5 * z * z);
+        }
+      }
+      const win = Math.max(1, Math.round(1.2 * sig / stepX));
+      const levels = [];
+      for (let k = 0; k < nCell; k++) {
+        if (dens[k] <= 0) continue;
+        let peak = true;
+        for (let j = Math.max(0, k - win); j <= Math.min(nCell - 1, k + win) && peak; j++) if (j !== k && dens[j] > dens[k]) peak = false;
+        if (!peak) continue;
+        let price = Math.exp(x0 + k * stepX);
+        // Fuentes y toques dentro de la zona; si hay un redondo mayor cerca, se usa ese número exacto
+        const near = cands.filter(c => Math.abs(c.price / price - 1) * 100 <= MAJOR.tolPct);
+        // Prioriza el redondo mayor (1.000) sobre el intermedio (1.500) y, entre iguales, el más cercano
+        const rnd = near.filter(c => c.round).sort((a, b) => (b.majorRound - a.majorRound) || (Math.abs(a.price - price) - Math.abs(b.price - price)))[0];
+        if (rnd) price = rnd.round;
+        levels.push({
+          price, strength: dens[k],
+          touches: near.reduce((a, c) => a + (c.piv || 0), 0),
+          sources: [...new Set(near.map(c => c.src))],
+          round: !!rnd
+        });
+      }
+      return { levels, from: daily[0].time, days: n };
+    }
+
+    // Los soportes/resistencias mayores más cercanos al precio actual
+    function majorAround(major, price) {
+      if (!major) return null;
+      // Solo zonas relevantes: al menos 30% de la fuerza de la zona más fuerte de ese lado (dentro de ±60%)
+      const side = cond => {
+        const pool = major.levels.filter(l => cond(l) && Math.abs(l.price / price - 1) < 0.6);
+        const top = Math.max(0, ...pool.map(l => l.strength));
+        return pool.filter(l => l.strength >= Math.max(MAJOR.minStrength, MAJOR.relStrength * top));
+      };
+      const below = side(l => l.price < price * 0.997).sort((a, b) => b.price - a.price).slice(0, MAJOR.show);
+      const above = side(l => l.price > price * 1.003).sort((a, b) => a.price - b.price).slice(0, MAJOR.show);
+      return { below, above, from: major.from, days: major.days };
+    }
+
+    // ---------------- Probabilidad de movimiento grande (±5%) ----------------
+    // Evento: dentro de la ventana, el precio TOCA +5% (alcista) o −5% (bajista) desde el cierre actual.
+    // Condiciones: régimen de volatilidad (percentil del ATR) y sesgo de la señal (puntaje técnico).
+    const MOVE = {
+      pct: 5,
+      win: { '15m': 96, '1h': 72, '1d': 10 },          // 24 h, 3 días, 10 días
+      winLabel: { '15m': '24 h', '1h': '3 días', '1d': '10 días' },
+      Kind: 3,            // suavizado: equivale a 3 ventanas independientes de "opinión previa"
+      minIndep: 30        // por debajo de esto, la estimación se marca como poco confiable
+    };
+    const REGIME_LABEL = ['comprimida', 'baja-media', 'media-alta', 'expandida'];
+    const SIDE_LABEL = ['bajista', 'neutra', 'alcista'];
+    const regimeBucket = r => r == null ? 1 : r < 20 ? 0 : r < 50 ? 1 : r < 80 ? 2 : 3;
+    const sideBucket = s => s < 45 ? 0 : s <= 55 ? 1 : 2;
+
+    // Mira hacia adelante desde t si se toca +pct o −pct, y cuántas velas tardó
+    function moveOutcome(kl, t, M, pct) {
+      const p = kl[t].close, upL = p * (1 + pct / 100), dnL = p * (1 - pct / 100);
+      let upAt = null, dnAt = null, hi = -Infinity, lo = Infinity;
+      for (let j = t + 1; j <= t + M; j++) {
+        if (upAt == null && kl[j].high >= upL) upAt = j - t;
+        if (dnAt == null && kl[j].low <= dnL) dnAt = j - t;
+        if (kl[j].high > hi) hi = kl[j].high;
+        if (kl[j].low < lo) lo = kl[j].low;
+      }
+      return { up: upAt != null, dn: dnAt != null, upAt, dnAt, maxUp: (hi / p - 1) * 100, maxDn: (lo / p - 1) * 100 };
+    }
+
+    function fitMoves(moves, M) {
+      const z = () => ({ n: 0, up: 0, dn: 0, any: 0 });
+      const add = (c, m) => { c.n++; if (m.up) c.up++; if (m.dn) c.dn++; if (m.up || m.dn) c.any++; };
+      const base = z(), reg = [0, 1, 2, 3].map(z), cell = [0, 1, 2, 3].map(() => [0, 1, 2].map(z));
+      const upBars = [], dnBars = [];
+      for (const m of moves) {
+        add(base, m); add(reg[m.rb], m); add(cell[m.rb][m.sb], m);
+        if (m.upAt != null) upBars.push(m.upAt);
+        if (m.dnAt != null) dnBars.push(m.dnAt);
+      }
+      return { base, reg, cell, upBars: median(upBars), dnBars: median(dnBars), M };
+    }
+
+    // Probabilidad de la celda (régimen × sesgo), suavizada hacia el régimen y este hacia la tasa general
+    // Las muestras se superponen (cada una comparte M−1 velas con la siguiente), así que el
+    // suavizado se mide en ventanas independientes: K = Kind × M velas.
+    function predictMove(fit, rb, sb) {
+      const K = MOVE.Kind * (fit.M || 1);
+      const sh = (k, n, p) => (k + K * p) / (n + K);
+      const out = {};
+      for (const e of ['up', 'dn', 'any']) {
+        const pBase = fit.base.n ? fit.base[e] / fit.base.n : 0;
+        const r = fit.reg[rb], c = fit.cell[rb][sb];
+        const pReg = sh(r[e], r.n, pBase);
+        out[e] = sh(c[e], c.n, pReg);
+        out[e + 'Base'] = pBase;
+      }
+      out.nCell = fit.cell[rb][sb].n;
+      out.nReg = fit.reg[rb].n;
+      return out;
+    }
+
+    function moveStats(moves, M) {
+      if (moves.length < 150) return null;
+      const fit = fitMoves(moves, M);
+      // Validación: calibrar con el 70% inicial, evaluar en el 30% final (separados por M velas)
+      const split = Math.floor(moves.length * 0.7);
+      const train = moves.slice(0, split);
+      const test = moves.slice(split).filter(m => m.t > train[train.length - 1].t + M);
+      let oos = null;
+      if (test.length >= 50) {
+        const ft = fitMoves(train, M);
+        const sk = {};
+        for (const e of ['up', 'dn']) {
+          let br = 0, bb = 0, ev = 0;
+          const pb = ft.base.n ? ft.base[e] / ft.base.n : 0;
+          for (const m of test) {
+            const y = m[e] ? 1 : 0;
+            br += (predictMove(ft, m.rb, m.sb)[e] - y) ** 2;
+            bb += (pb - y) ** 2;
+            ev += y;
+          }
+          sk[e] = ev >= ANALOG.minEvents && bb > 0 ? 1 - br / bb : null;
+        }
+        oos = { n: test.length, skillUp: sk.up, skillDn: sk.dn };
+      }
+      return { fit, oos, M, pct: MOVE.pct, n: moves.length, nEff: Math.max(1, Math.round(moves.length / M)) };
+    }
+
+    // ---------------- Casos análogos: ¿la situación actual se parece a las previas a un salto? ----------------
+    const ANALOG = {
+      k: 15,              // episodios más parecidos a considerar
+      prior: 5,           // suavizado: equivale a 5 episodios con la tasa general
+      minEvents: 8,       // saltos mínimos en la validación para informar un skill
+      show: 5,            // casos mostrados en pantalla
+      // peso de cada componente de la huella (en el mismo orden que analogFeatures)
+      w: [2.0, 1.0, 1.2, 1.0, 0.8, 1.0, 0.6, 0.6, 0.5, 0.6],
+      names: ['volatilidad (ATR%)', 'percentil de volatilidad', 'compresión del rango', 'impulso', 'volumen', 'RSI',
+              'distancia al VWAP', 'MACD', 'tendencia mayor', 'posición en el rango']
+    };
+
+    // Huella de la vela t: solo usa información disponible al cierre de t
+    function analogFeatures(kl, ser, t, rank) {
+      const atr = ser.atr[t], rsi = ser.rsi[t];
+      if (!atr || rsi == null || t < 20) return null;
+      const c = kl[t].close;
+      let hi = -Infinity, lo = Infinity;
+      for (let j = t - 19; j <= t; j++) { if (kl[j].high > hi) hi = kl[j].high; if (kl[j].low < lo) lo = kl[j].low; }
+      let v = 0, vn = 0;
+      for (let j = t - 4; j <= t; j++) if (ser.relVol[j] != null) { v += ser.relVol[j]; vn++; }
+      const vw = ser.vwap[t];
+      return [
+        Math.log(atr / c),                                   // tamaño típico de las velas (clave para un 5%)
+        rank == null ? 0.5 : rank / 100,                     // volatilidad relativa a su propio historial
+        (hi - lo) / atr,                                     // rango de 20 velas en ATR: bajo = compresión
+        (c / kl[t - 20].close - 1) / (atr / c) / Math.sqrt(20),  // impulso normalizado
+        Math.log(Math.max(vn ? v / vn : 1, 0.05)),           // volumen relativo de las últimas 5 velas
+        rsi / 100,
+        vw ? clamp((c - vw) / atr, -4, 4) : 0,
+        ser.hist[t] != null ? clamp(ser.hist[t] / atr, -2, 2) : 0,
+        ser.htf[t] || 0,
+        (c - lo) / ((hi - lo) || 1)                          // dónde está el precio dentro del rango
+      ];
+    }
+
+    function featureScale(rows) {
+      const d = rows[0].length, mean = new Array(d).fill(0), sd = new Array(d).fill(0);
+      for (const r of rows) for (let k = 0; k < d; k++) mean[k] += r[k] / rows.length;
+      for (const r of rows) for (let k = 0; k < d; k++) sd[k] += (r[k] - mean[k]) ** 2 / rows.length;
+      return { mean, sd: sd.map(x => Math.sqrt(x) || 1) };
+    }
+
+    function analogDist(a, b, sc) {
+      let s = 0;
+      for (let k = 0; k < a.length; k++) { const z = (a[k] - b[k]) / sc.sd[k]; s += ANALOG.w[k] * z * z; }
+      return Math.sqrt(s);
+    }
+
+    // Busca los episodios más parecidos (sin tomar dos velas del mismo episodio) y cuenta qué pasó después
+    function findAnalogs(cands, vec, sc, M) {
+      if (!vec || cands.length < 50) return null;
+      const ds = cands.map(m => ({ m, d: analogDist(vec, m.f, sc) })).sort((a, b) => a.d - b.d);
+      const dMed = ds[Math.floor(ds.length / 2)].d || 1;
+      const chosen = [];
+      for (const x of ds) {
+        if (chosen.every(c => Math.abs(c.m.t - x.m.t) >= M / 2)) chosen.push(x);
+        if (chosen.length >= ANALOG.k) break;
+      }
+      let bu = 0, bd = 0;
+      for (const m of cands) { if (m.up) bu++; if (m.dn) bd++; }
+      const baseUp = bu / cands.length, baseDn = bd / cands.length;
+      const ups = chosen.filter(c => c.m.up).length, dns = chosen.filter(c => c.m.dn).length;
+      const k = chosen.length;
+      return {
+        k, ups, dns, baseUp, baseDn,
+        pUp: (ups + ANALOG.prior * baseUp) / (k + ANALOG.prior),
+        pDn: (dns + ANALOG.prior * baseDn) / (k + ANALOG.prior),
+        cases: chosen.slice(0, ANALOG.show).map(c => ({ ...c.m, f: undefined, sim: clamp(1 - c.d / dMed, 0, 1) })),
+        simAvg: chosen.reduce((a, c) => a + clamp(1 - c.d / dMed, 0, 1), 0) / (k || 1)
+      };
+    }
+
+    // Arma el modelo con todas las muestras y lo valida: busca solo en el 70% inicial y prueba en el 30% final
+    function buildAnalog(moves, M) {
+      const rows = moves.filter(m => m.f);
+      if (rows.length < 200) return null;
+      const scale = featureScale(rows.map(m => m.f));
+      const split = Math.floor(rows.length * 0.7);
+      const train = rows.slice(0, split);
+      const trainEnd = train[train.length - 1].t;
+      const step = Math.max(1, Math.floor(M / 4));
+      const test = rows.filter(m => m.t > trainEnd + M).filter((_, i) => i % step === 0);
+      let oos = null;
+      if (test.length >= 20) {
+        const scTr = featureScale(train.map(m => m.f));
+        let bu = 0, bd = 0, ru = 0, rd = 0, n = 0, evUp = 0, evDn = 0;
+        for (const m of test) {
+          const a = findAnalogs(train, m.f, scTr, M);
+          if (!a) continue;
+          const yu = m.up ? 1 : 0, yd = m.dn ? 1 : 0;
+          bu += (a.pUp - yu) ** 2; ru += (a.baseUp - yu) ** 2;
+          bd += (a.pDn - yd) ** 2; rd += (a.baseDn - yd) ** 2;
+          evUp += yu; evDn += yd; n++;
+        }
+        // Con muy pocos saltos en la validación el skill no significa nada: se informa como null
+        if (n >= 20) oos = {
+          n, evUp, evDn,
+          skillUp: evUp >= ANALOG.minEvents && ru > 0 ? 1 - bu / ru : null,
+          skillDn: evDn >= ANALOG.minEvents && rd > 0 ? 1 - bd / rd : null
+        };
+      }
+      return { rows, scale, M, oos };
+    }
+
+    // ---------------- FVG (Fair Value Gaps / huecos de valor) ----------------
+    // Patrón de 3 velas: alcista si el mínimo de la vela i supera el máximo de la vela i-2;
+    // bajista si el máximo de la vela i queda por debajo del mínimo de la vela i-2.
+    const FVG = {
+      minAtr: 0.2,        // tamaño mínimo del hueco en ATR (descarta huecos microscópicos)
+      lookback: 300,      // huecos de las últimas 300 velas
+      fillWinMult: 4,     // ventana para medir si se llenan: 4 × horizonte
+      maxDraw: 8          // máximo de huecos dibujados por gráfico
+    };
+
+    function findFVGs(kl, atr, fromIdx, lastIdx) {
+      const out = [];
+      for (let i = Math.max(2, fromIdx); i <= lastIdx; i++) {
+        const a = atr[i] || atr[i - 1];
+        if (!a) continue;
+        if (kl[i].low > kl[i - 2].high && kl[i].low - kl[i - 2].high >= FVG.minAtr * a) {
+          out.push({ i, type: 1, top: kl[i].low, bot: kl[i - 2].high });
+        } else if (kl[i].high < kl[i - 2].low && kl[i - 2].low - kl[i].high >= FVG.minAtr * a) {
+          out.push({ i, type: -1, top: kl[i - 2].low, bot: kl[i].high });
+        }
+      }
+      return out;
+    }
+
+    // Cuánto se llenó un hueco hasta la vela "upto": 0 = intacto, 1 = cerrado.
+    // Un hueco alcista se llena cuando el precio baja dentro de él; uno bajista, cuando sube.
+    function trackFVG(g, kl, upto) {
+      const h = g.top - g.bot;
+      let fill = 0, ceAt = null, filledAt = null;
+      for (let j = g.i + 1; j <= upto; j++) {
+        const f = g.type > 0 ? (g.top - kl[j].low) / h : (kl[j].high - g.bot) / h;
+        if (f > fill) {
+          fill = f;
+          if (ceAt == null && fill >= 0.5) ceAt = j;
+          if (fill >= 1) { filledAt = j; break; }
+        }
+      }
+      return { fill: clamp(fill, 0, 1), ceAt, filledAt };
+    }
+
+    // Huecos todavía abiertos en vivo, con la parte que falta llenar
+    function openFVGs(kl, atr, lastIdx) {
+      const gaps = findFVGs(kl, atr, lastIdx - FVG.lookback, lastIdx - 1);   // creados con velas cerradas
+      const open = [];
+      for (const g of gaps) {
+        const tr = trackFVG(g, kl, lastIdx);
+        if (tr.filledAt != null) continue;
+        const h = g.top - g.bot;
+        const remTop = g.type > 0 ? g.top - tr.fill * h : g.top;
+        const remBot = g.type > 0 ? g.bot : g.bot + tr.fill * h;
+        open.push({ ...g, fill: tr.fill, remTop, remBot, mid: (g.top + g.bot) / 2, age: lastIdx - g.i });
+      }
+      return open;
+    }
+
+    // Estadística histórica: qué porcentaje de huecos llega al 50% (CE) y al 100% dentro de la ventana
+    function fvgFillStats(kl, atr, warm, last, win) {
+      const gaps = findFVGs(kl, atr, warm, last - win);
+      if (gaps.length < 10) return null;
+      let ce = 0, full = 0, barsCe = 0;
+      for (const g of gaps) {
+        const tr = trackFVG(g, kl, g.i + win);
+        if (tr.ceAt != null) { ce++; barsCe += tr.ceAt - g.i; }
+        if (tr.filledAt != null) full++;
+      }
+      return { n: gaps.length, ce: ce / gaps.length, full: full / gaps.length, barsCe: ce ? barsCe / ce : null, win };
     }
 
     // ---------------- Libro de órdenes por tramos ----------------
@@ -1323,7 +1777,7 @@
         item.klines = await loadHistory(item.symbol, tf, HIST_TARGET[tf]);
         if (withAux) {
           item.htfKlines = await loadHistory(item.symbol, HTF_OF[tf], 300);
-          if (tf !== '1d') item.dailyKlines = await loadHistory(item.symbol, '1d', 30);
+          if (tf !== '1d') item.dailyKlines = await loadHistory(item.symbol, '1d', 1000);   // ~3 años para niveles mayores
         }
       } catch (e) {
         console.warn('Error cargando', item.symbol, e);
@@ -1343,7 +1797,7 @@
           if (gen === analysisGen) item.htfKlines = h;
         }
         if (tf !== '1d' && (!lastD || now > lastD.time + 2 * TF_MS['1d'])) {
-          const d = await loadHistory(item.symbol, '1d', 30);
+          const d = await loadHistory(item.symbol, '1d', 1000);
           if (gen === analysisGen) item.dailyKlines = d;
         }
       } catch (e) { console.warn('Error refrescando auxiliares', item.symbol, e); }
@@ -1363,6 +1817,7 @@
       renderPortfolioChips();
       document.getElementById('sel-all').addEventListener('change', e => toggleAll(e.target.checked));
       document.getElementById('rsi-mode').value = rsiMode;
+      try { if (localStorage.getItem('crypto_summary_collapsed') === '1') document.getElementById('dashboard-grid').classList.add('summary-collapsed'); } catch (e) {}
       let resizeT = null;
       window.addEventListener('resize', () => {
         clearTimeout(resizeT);
@@ -1371,6 +1826,15 @@
       startCountdownTimer();
       setInterval(flush, FLUSH_MS);
       startAnalysis();
+    }
+
+    // Pliega o despliega el resumen lateral y redibuja los gráficos con el nuevo ancho
+    function toggleSummary(collapse) {
+      document.getElementById('dashboard-grid').classList.toggle('summary-collapsed', collapse);
+      try { localStorage.setItem('crypto_summary_collapsed', collapse ? '1' : '0'); } catch (e) {}
+      const redraw = () => activeGridSymbols.forEach(s => state[s] && drawCanvasChart(state[s]));
+      requestAnimationFrame(redraw);
+      setTimeout(redraw, 300);   // después de la transición
     }
 
     function changeRefreshInterval(val) {
@@ -1780,27 +2244,32 @@
           <div class="metrics" id="metrics-${s}"></div>
           <div class="card-body">
             <div class="chart-col">
-              <div class="prob-bar-container">
-                <div class="prob-labels">
-                  <span id="prob-label-${s}">Prob. ↑</span>
-                  <span id="prob-val-${s}"></span>
-                </div>
-                <div class="prob-bar"><div class="prob-fill" id="prob-fill-${s}"></div></div>
-                <div class="prob-sub" id="prob-sub-${s}"></div>
-              </div>
-              <div class="tp-box">
-                <div class="tp-item"><span class="tp-label">TP1</span><span class="tp-val" id="tp1-${s}"></span><span class="tp-hit" id="tp1h-${s}"></span></div>
-                <div class="tp-item"><span class="tp-label">TP2</span><span class="tp-val" id="tp2-${s}"></span><span class="tp-hit" id="tp2h-${s}"></span></div>
-                <div class="tp-item"><span class="tp-label">TP3</span><span class="tp-val" id="tp3-${s}"></span><span class="tp-hit" id="tp3h-${s}"></span></div>
-                <div class="tp-item"><span class="tp-label">SL</span><span class="tp-val sl" id="sl-${s}"></span><span class="tp-hit" id="slh-${s}"></span></div>
-              </div>
               <div class="canvas-wrapper">
                 <canvas class="chart" id="canvas-${s}"></canvas>
                 <div id="tooltip-${s}" class="chart-tooltip"></div>
               </div>
               <div class="bt-foot" id="bt-foot-${s}"></div>
             </div>
-            <div class="side-col" id="details-${s}"></div>
+            <div class="side-col">
+              <div class="side-top">
+                <div class="prob-bar-container">
+                  <div class="prob-labels">
+                    <span id="prob-label-${s}">Prob. ↑</span>
+                    <span id="prob-val-${s}"></span>
+                  </div>
+                  <div class="prob-bar"><div class="prob-fill" id="prob-fill-${s}"></div></div>
+                  <div class="prob-sub" id="prob-sub-${s}"></div>
+                </div>
+                <div class="move-box" id="move-${s}"></div>
+                <div class="tp-box">
+                  <div class="tp-item"><span class="tp-label">TP1</span><span class="tp-val" id="tp1-${s}"></span><span class="tp-hit" id="tp1h-${s}"></span></div>
+                  <div class="tp-item"><span class="tp-label">TP2</span><span class="tp-val" id="tp2-${s}"></span><span class="tp-hit" id="tp2h-${s}"></span></div>
+                  <div class="tp-item"><span class="tp-label">TP3</span><span class="tp-val" id="tp3-${s}"></span><span class="tp-hit" id="tp3h-${s}"></span></div>
+                  <div class="tp-item"><span class="tp-label">SL</span><span class="tp-val sl" id="sl-${s}"></span><span class="tp-hit" id="slh-${s}"></span></div>
+                </div>
+              </div>
+              <div class="details-cols" id="details-${s}"></div>
+            </div>
           </div>
         `;
         container.appendChild(card);
@@ -1828,6 +2297,7 @@
         const m = document.getElementById(`metrics-${sym}`); if (m) m.innerHTML = '';
         ['tp1', 'tp2', 'tp3', 'sl'].forEach(k => { set(`${k}-${sym}`, '—'); set(`${k === 'sl' ? 'slh' : k + 'h'}-${sym}`, ''); });
         set(`bt-foot-${sym}`, '');
+        const mb0 = document.getElementById(`move-${sym}`); if (mb0) mb0.innerHTML = '';
         renderDetails(item);
         drawCanvasChart(item);
         return;
@@ -1854,6 +2324,11 @@
       }
       if (item.htfTrend) chips.push(metricChip(`${HTF_LABEL[HTF_OF[tf]]} ${item.htfTrend > 0 ? '↑' : '↓'}`, item.htfTrend > 0 ? 'up' : 'down', 'Tendencia de la temporalidad mayor (cierre vs EMA 50)'));
       if (item.rs != null) chips.push(metricChip(`vs BTC ${item.rs >= 0 ? '+' : ''}${item.rs.toFixed(1)}%`, item.rs > 0 ? 'up' : 'down', `Rendimiento de las últimas ${CFG.rsBars} velas menos el de BTC`));
+      if (item.fvg && item.fvg.inside) {
+        const g = item.fvg.inside;
+        chips.push(metricChip(`Dentro de FVG ${g.type > 0 ? '↑' : '↓'}`, g.type > 0 ? 'up' : 'down',
+          `El precio está dentro de un hueco ${g.type > 0 ? 'alcista' : 'bajista'} abierto (${Math.round(g.fill * 100)}% llenado)`));
+      }
       if (item.vp) chips.push(metricChip(`Precio ${item.price > item.vp.poc ? 'sobre' : 'bajo'} POC`, item.price > item.vp.poc ? 'up' : 'down', 'Precio con más volumen negociado en las últimas 500 velas'));
       const m = document.getElementById(`metrics-${sym}`);
       if (m) m.innerHTML = chips.join('');
@@ -1890,6 +2365,7 @@
         if (bt.strong) foot += ` · señales fuertes ${bt.strong.net >= 0 ? '+' : ''}${bt.strong.net.toFixed(2)}% neto`;
       } else if (bt) foot = 'Pocas muestras para validar fuera de muestra.';
       set(`bt-foot-${sym}`, foot);
+      renderMoveBox(item);
 
       renderDetails(item);
       drawCanvasChart(item);
@@ -1964,7 +2440,144 @@
         btSec = sec('Backtest', [row('Estado', 'historial insuficiente')]);
       }
 
-      el.innerHTML = levels + bookSection(item) + ind + btSec;
+      el.innerHTML = analogSection(item) + moveSection(item) + majorSection(item) + levels + fvgSection(item) + bookSection(item) + ind + btSec;
+    }
+
+    // Bloque de la tarjeta: probabilidad de tocar +5% / −5% en la ventana
+    function renderMoveBox(item) {
+      const el = document.getElementById(`move-${item.symbol}`);
+      if (!el) return;
+      const m = item.move, tf = currentTimeframe, a = item.analog;
+      if (a) {
+        const ab = (lbl, p, base, hits, col) => `
+          <div class="move-item" title="De los ${a.k} momentos del historial más parecidos al actual, ${hits} tocaron ese nivel. Tasa general: ${pct(base, 0)}">
+            <div class="move-top"><span>${lbl}</span><b style="color:${col}">${pct(p, 0)}</b></div>
+            <div class="move-bar"><i style="width:${Math.min(100, p * 100).toFixed(1)}%;background:${col}"></i></div>
+            <div class="move-sub">${hits} de ${a.k} casos parecidos · general ${pct(base, 0)}${p > base * 1.2 ? ' · por encima' : p < base * 0.8 ? ' · por debajo' : ''}</div>
+          </div>`;
+        el.innerHTML =
+          ab(`Salto +${MOVE.pct}% en ${MOVE.winLabel[tf]}`, a.pUp, a.baseUp, a.ups, '#0ecb81') +
+          ab(`Caída −${MOVE.pct}% en ${MOVE.winLabel[tf]}`, a.pDn, a.baseDn, a.dns, '#f6465d');
+        return;
+      }
+      if (!m) { el.innerHTML = `<div class="move-sub" style="grid-column:1/-1">Movimiento ±${MOVE.pct}%: historial insuficiente para estimarlo.</div>`; return; }
+      const st = item.bt && item.bt.move;
+      const weak = st && st.nEff < MOVE.minIndep;
+      const box = (lbl, p, base, col) => `
+        <div class="move-item" title="Frecuencia histórica en situaciones parecidas (volatilidad ${REGIME_LABEL[m.rb]}, señal ${SIDE_LABEL[m.sb]}). Tasa general: ${pct(base, 0)}">
+          <div class="move-top"><span>${lbl}</span><b style="color:${col}">${pct(p, 0)}</b></div>
+          <div class="move-bar"><i style="width:${Math.min(100, p * 100).toFixed(1)}%;background:${col}"></i></div>
+          <div class="move-sub">general ${pct(base, 0)} · ${p > base * 1.2 ? 'por encima' : p < base * 0.8 ? 'por debajo' : 'en línea'}${weak ? ' · ⚠ muestra chica' : ''}</div>
+        </div>`;
+      el.innerHTML =
+        box(`Toca +${MOVE.pct}% en ${MOVE.winLabel[tf]}`, m.up, m.upBase, '#0ecb81') +
+        box(`Toca −${MOVE.pct}% en ${MOVE.winLabel[tf]}`, m.dn, m.dnBase, '#f6465d');
+    }
+
+    // Sección del panel: soportes y resistencias mayores del historial diario
+    function majorSection(item) {
+      const m = item.majorNear;
+      if (!m || (!m.below.length && !m.above.length)) return '';
+      const p = item.price;
+      const dist = x => { const d = (x / p - 1) * 100; return `${d >= 0 ? '+' : ''}${d.toFixed(1)}%`; };
+      const desc = l => {
+        const parts = [];
+        if (l.touches) parts.push(`${l.touches} toque${l.touches > 1 ? 's' : ''}`);
+        l.sources.filter(x => x !== 'pivote').forEach(x => parts.push(x));
+        return parts.join(' · ');
+      };
+      const row = (lbl, l, cls) => `<div class="d-row" title="${desc(l)} · fuerza ${l.strength.toFixed(1)}"><span class="d-k">${lbl} <small>${desc(l)}</small></span><span class="d-v ${cls}">${formatPrice(l.price)} <small>${dist(l.price)}</small></span></div>`;
+      const yrs = m.days / 365;
+      const span = yrs >= 1 ? `${yrs.toFixed(1).replace('.', ',')} años` : `${m.days} días`;
+      return `<div class="d-sec"><div class="d-title">Niveles mayores · diario, ${span}</div>
+        ${m.above.slice().reverse().map((l, i) => row(`R${m.above.length - i}`, l, 'val-down')).join('')}
+        <div class="book-mid">precio ${formatPrice(p)}</div>
+        ${m.below.map((l, i) => row(`S${i + 1}`, l, 'val-up')).join('')}
+      </div>`;
+    }
+
+    // Sección del panel: los momentos del historial más parecidos al actual y qué pasó después
+    function analogSection(item) {
+      const a = item.analog, model = item.bt && item.bt.analog;
+      if (!a || !model) return '';
+      const tf = currentTimeframe, ms = TF_MS[tf];
+      const dur = bars => { const h = bars * ms / 36e5; return h < 48 ? `${h.toFixed(h < 10 ? 1 : 0)}h` : `${(h / 24).toFixed(1)}d`; };
+      const when = t => new Date(t).toLocaleString('es-AR', tf === '1d'
+        ? { day: '2-digit', month: '2-digit', year: '2-digit' }
+        : { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+      const out = c => {
+        const up = c.up ? `<span class="val-up">↑ ${dur(c.upAt)}</span>` : '';
+        const dn = c.dn ? `<span class="val-down">↓ ${dur(c.dnAt)}</span>` : '';
+        if (up && dn) return c.upAt <= c.dnAt ? `${up} ${dn}` : `${dn} ${up}`;
+        return up || dn || '<span class="muted">sin salto</span>';
+      };
+      const o = model.oos;
+      let tag = '';
+      if (o) {
+        const good = (o.skillUp != null && o.skillUp > 0.02) || (o.skillDn != null && o.skillDn > 0.02);
+        const unknown = o.skillUp == null && o.skillDn == null;
+        tag = unknown ? '<span class="muted">validación: pocos saltos</span>'
+            : good ? '<span class="val-up">validado: anticipa ✓</span>'
+            : '<span class="val-down">validado: no anticipa</span>';
+      }
+      const caseRows = a.cases.slice(0, 3).map(c =>
+        `<div class="d-row"><span class="d-k">${when(c.time)} <small class="case-sim">${Math.round(c.sim * 100)}%</small></span><span class="d-v">${out(c)}</span></div>`).join('');
+      return `<div class="d-sec" title="Los momentos del historial más parecidos a la última vela cerrada (volatilidad, compresión, impulso, volumen, RSI, VWAP, MACD, tendencia) y si tocaron ±${MOVE.pct}% en ${MOVE.winLabel[tf]}">
+        <div class="d-title">Casos parecidos · ${a.k}</div>
+        <div class="d-row"><span class="d-k">Terminaron en salto</span><span class="d-v"><span class="val-up">${a.ups} ↑</span> · <span class="val-down">${a.dns} ↓</span></span></div>
+        ${caseRows}
+        ${tag ? `<div class="book-note">${tag}</div>` : ''}
+      </div>`;
+    }
+
+    // Sección del panel: detalle del análisis de movimiento grande
+    function moveSection(item) {
+      const m = item.move, st = item.bt && item.bt.move;
+      if (!m || !st) return '';
+      const tf = currentTimeframe, ms = TF_MS[tf];
+      const dur = bars => {
+        if (bars == null) return '—';
+        const h = bars * ms / 36e5;
+        return h < 48 ? `${h.toFixed(h < 10 ? 1 : 0)}h` : `${(h / 24).toFixed(1)}d`;
+      };
+      const row = (k, v, sub, cls) =>
+        `<div class="d-row"><span class="d-k">${k}</span><span class="d-v ${cls || ''}">${v}${sub ? ` <small>${sub}</small>` : ''}</span></div>`;
+      const sk = x => x == null ? '—' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
+      const weak = st.nEff < MOVE.minIndep;
+      return `<div class="d-sec" title="Frecuencia histórica de tocar ±${MOVE.pct}% con la misma volatilidad (${REGIME_LABEL[m.rb]}) y sesgo (${SIDE_LABEL[m.sb]}). ${st.n} muestras, ≈${st.nEff} independientes.">
+        <div class="d-title">±${MOVE.pct}% en ${MOVE.winLabel[tf]} · por régimen${weak ? ' ⚠' : ''}</div>
+        ${row('↑ / ↓', `<span class="val-up">${pct(m.up, 0)}</span> / <span class="val-down">${pct(m.dn, 0)}</span>`, `gral ${pct(m.upBase, 0)}/${pct(m.dnBase, 0)}`)}
+        ${row('Tiempo típico', `↑${dur(st.fit.upBars)} ↓${dur(st.fit.dnBars)}`)}
+        ${st.oos ? row('Skill', `${sk(st.oos.skillUp)} / ${sk(st.oos.skillDn)}`, '', ((st.oos.skillUp || 0) > 0 || (st.oos.skillDn || 0) > 0) ? 'val-up' : 'val-down') : ''}
+        ${weak ? `<div class="book-note">⚠ muestra chica (≈${st.nEff} ventanas)</div>` : ''}
+      </div>`;
+    }
+
+    // Sección FVG: huecos abiertos más cercanos y cómo se comportaron históricamente en este par
+    function fvgSection(item) {
+      const f = item.fvg;
+      if (!f) return '';
+      const p = item.price;
+      const dist = x => { const d = (x / p - 1) * 100; return `${d >= 0 ? '+' : ''}${d.toFixed(2)}%`; };
+      const row = (k, v, sub, cls) =>
+        `<div class="d-row"><span class="d-k">${k}</span><span class="d-v ${cls || ''}">${v}${sub ? ` <small>${sub}</small>` : ''}</span></div>`;
+      const zone = g => `${formatPrice(g.remBot)} – ${formatPrice(g.remTop)}`;
+      const info = g => `<div class="book-note">${dist(g.type > 0 ? g.remTop : g.remBot)} · llenado ${Math.round(g.fill * 100)}% · hace ${g.age} velas</div>`;
+      const rows = [];
+      if (f.inside) rows.push(row('Precio dentro de', `FVG ${f.inside.type > 0 ? 'alcista' : 'bajista'}`, zone(f.inside), f.inside.type > 0 ? 'val-up' : 'val-down'));
+      rows.push(f.bearAbove
+        ? row('Bajista arriba', zone(f.bearAbove), '', 'val-down') + info(f.bearAbove)
+        : row('Bajista arriba', '—', 'ninguno abierto'));
+      rows.push(f.bullBelow
+        ? row('Alcista abajo', zone(f.bullBelow), '', 'val-up') + info(f.bullBelow)
+        : row('Alcista abajo', '—', 'ninguno abierto'));
+      rows.push(row('Abiertos', `${f.nBull} ↑ · ${f.nBear} ↓`, `últimas ${FVG.lookback} velas`));
+      const st = item.bt && item.bt.fvg;
+      if (st) {
+        rows.push(row('Llegan al 50%', pct(st.ce, 0), st.barsCe != null ? `~${st.barsCe.toFixed(0)} velas` : ''));
+        rows.push(row('Se cierran completos', pct(st.full, 0), `en ≤${st.win} velas · ${st.n} huecos`));
+      }
+      return `<div class="d-sec"><div class="d-title">FVG · huecos de valor</div>${rows.join('')}</div>`;
     }
 
     const fmtUsd = v => v >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M`
@@ -1973,50 +2586,37 @@
     // Sección "Libro de órdenes": muros por tramos de 0,5% y distribución del dinero por distancia
     function bookSection(item) {
       const b = item.book;
-      const title = `<div class="d-title">Libro de órdenes · tramos de ${String(BOOK.bucketPct).replace('.', ',')}%</div>`;
-      if (!b) return `<div class="d-sec">${title}<div class="book-note">Leyendo el libro… (se consulta un par cada ${DEPTH_GAP_MS / 1000} s)</div></div>`;
-
+      const title = `<div class="d-title">Libro · tramos ${String(BOOK.bucketPct).replace('.', ',')}%${b ? ` <span class="muted" style="text-transform:none;font-weight:400">· ${b.nSnaps} lect.</span>` : ''}</div>`;
+      if (!b) return `<div class="d-sec">${title}<div class="book-note">Leyendo el libro…</div></div>`;
       const wallRow = (s, label) => {
-        const sd = b.sides[s];
-        const cls = s === 'ask' ? 'val-down' : 'val-up';
+        const sd = b.sides[s], cls = s === 'ask' ? 'val-down' : 'val-up';
         if (sd.wall) {
           const w = sd.wall;
-          return `<div class="d-row"><span class="d-k">${label}</span><span class="d-v ${cls}">${formatPrice(w.price)} <small>${w.distPct >= 0 ? '+' : ''}${w.distPct.toFixed(2)}%</small></span></div>
-                  <div class="book-note">${fmtUsd(w.notional)} · ${w.ratio.toFixed(1)}× la mediana · firme en ${Math.round(w.presence * 100)}% de las lecturas</div>`;
+          return `<div class="d-row" title="${w.ratio.toFixed(1)}× la mediana de los tramos · firme en ${Math.round(w.presence * 100)}% de las lecturas"><span class="d-k">${label}</span><span class="d-v ${cls}">${formatPrice(w.price)} <small>${w.distPct >= 0 ? '+' : ''}${w.distPct.toFixed(1)}% · ${fmtUsd(w.notional)}</small></span></div>`;
         }
-        const why = sd.reason === 'cobertura' ? `el libro solo llega a ${s === 'ask' ? '+' : '−'}${sd.cover.toFixed(2)}%`
-                  : sd.reason === 'confirmando' ? `confirmando (${b.nSnaps}/${BOOK.minSnaps} lecturas)`
-                  : 'ningún tramo se destaca';
+        const why = sd.reason === 'cobertura' ? `libro hasta ${s === 'ask' ? '+' : '−'}${sd.cover.toFixed(1)}%`
+                  : sd.reason === 'confirmando' ? `confirmando ${b.nSnaps}/${BOOK.minSnaps}` : 'sin muro';
         return `<div class="d-row"><span class="d-k">${label}</span><span class="d-v"><small>${why}</small></span></div>`;
       };
-
-      // Barras: ventas arriba (de lejos a cerca), compras abajo (de cerca a lejos)
-      const asks = b.sides.ask.buckets.slice(0, 6), bids = b.sides.bid.buckets.slice(0, 6);
+      // Histograma compacto: 3 tramos por lado
+      const asks = b.sides.ask.buckets.slice(0, 3), bids = b.sides.bid.buckets.slice(0, 3);
       const maxN = Math.max(...asks.concat(bids).map(x => x.notional), 1);
+      const nf = v => (v % 1 ? v.toFixed(1) : v.toFixed(0)).replace('.', ',');
       const bar = (x, s) => {
         const isWall = b.sides[s].wall && b.sides[s].wall.k === x.k;
         const sg = s === 'ask' ? '+' : '−';
-        const lbl = `${x.from ? sg : ''}${x.from.toFixed(1)}–${sg}${x.to.toFixed(1)}%${x.partial ? '*' : ''}`;
         return `<div class="book-row${isWall ? ' wall' : ''}">
-                  <span class="book-lbl">${lbl}</span>
+                  <span class="book-lbl">${sg}${nf(x.from)}–${nf(x.to)}%${x.partial ? '*' : ''}</span>
                   <span class="book-bar"><i class="${s}" style="width:${(x.notional / maxN * 100).toFixed(1)}%"></i></span>
                   <span class="book-val">${fmtUsd(x.notional)}</span>
                 </div>`;
       };
-      const bars = asks.slice().reverse().map(x => bar(x, 'ask')).join('') +
-                   `<div class="book-mid">precio ${formatPrice(b.mid)}</div>` +
-                   bids.map(x => bar(x, 'bid')).join('');
-      const partial = asks.concat(bids).some(x => x.partial) ? '<div class="book-note">* tramo incompleto: el libro de 1000 niveles no llega hasta ahí</div>' : '';
-      const age = Math.max(0, Math.round((Date.now() - b.t) / 1000));
       const obi = b.obi;
-
       return `<div class="d-sec">${title}
-        ${wallRow('ask', 'Muro de venta')}
-        ${wallRow('bid', 'Muro de compra')}
-        <div class="d-row"><span class="d-k">Presión ±${BOOK.nearPct}%</span><span class="d-v ${obi > 0 ? 'val-up' : 'val-down'}">${obi >= 0 ? '+' : ''}${(obi * 100).toFixed(0)}% <small>${obi > 0 ? 'más compras' : 'más ventas'}</small></span></div>
-        <div class="book-bars">${bars}</div>
-        ${partial}
-        <div class="book-note">${b.nSnaps} lectura${b.nSnaps > 1 ? 's' : ''} · última hace ${age} s</div>
+        ${wallRow('ask', 'Muro venta')}
+        ${wallRow('bid', 'Muro compra')}
+        <div class="d-row"><span class="d-k">Presión ±${BOOK.nearPct}%</span><span class="d-v ${obi > 0 ? 'val-up' : 'val-down'}">${obi >= 0 ? '+' : ''}${(obi * 100).toFixed(0)}%</span></div>
+        <div class="book-bars">${asks.slice().reverse().map(x => bar(x, 'ask')).join('')}${bids.map(x => bar(x, 'bid')).join('')}</div>
       </div>`;
     }
 
@@ -2038,6 +2638,7 @@
           <td class="bold" id="tbl-prob-${s}"></td>
           <td class="mono" id="tbl-tp1-${s}"></td>
           <td class="muted" id="tbl-hit-${s}"></td>
+          <td class="mono" id="tbl-move-${s}" style="font-size:0.74rem"></td>
         `;
         tbody.appendChild(tr);
         document.getElementById(`sel-${s}`).addEventListener('change', e => toggleSelect(s, e.target.checked));
@@ -2045,6 +2646,8 @@
       });
       syncCheckboxes();
       sortTable();
+      const sc = document.getElementById('strip-count');
+      if (sc) sc.innerText = Object.keys(state).length;
     }
 
     function sortTable() {
@@ -2071,6 +2674,7 @@
         if (probEl) { probEl.innerText = '—'; probEl.className = 'bold'; }
         if (tp1El) { tp1El.innerText = '—'; tp1El.className = 'mono'; }
         if (hitEl) hitEl.innerText = '';
+        const mv0 = document.getElementById(`tbl-move-${sym}`); if (mv0) mv0.innerText = '';
         return;
       }
       const cls = item.dir > 0 ? 'val-up' : 'val-down';
@@ -2082,6 +2686,11 @@
       if (tp1El) { tp1El.innerText = formatPrice(item.tp1); tp1El.className = `mono ${cls}`; }
       const st = item.bt && item.bt.tp ? item.bt.tp[item.dir] : null;
       if (hitEl) hitEl.innerText = st ? pct(st.h1, 0) : '—';
+      const mvEl = document.getElementById(`tbl-move-${sym}`);
+      const mvSrc = item.analog ? { up: item.analog.pUp, dn: item.analog.pDn } : item.move;
+      if (mvEl) mvEl.innerHTML = mvSrc
+        ? `<span class="val-up">${Math.round(mvSrc.up * 100)}</span>/<span class="val-down">${Math.round(mvSrc.dn * 100)}</span>`
+        : '—';
     }
 
     // ============================================================
@@ -2110,7 +2719,7 @@
         const tr = document.createElement('tr');
         if (item.symbol === btSelected) tr.className = 'selected';
         if (!bt) {
-          tr.innerHTML = `<td class="bold">${item.symbol}</td><td colspan="9" class="muted">${item.loadError ? 'Error de carga' : 'Historial insuficiente para backtest'}</td>`;
+          tr.innerHTML = `<td class="bold">${item.symbol}</td><td colspan="10" class="muted">${item.loadError ? 'Error de carga' : 'Historial insuficiente para backtest'}</td>`;
         } else {
           const o = bt.oos;
           const oosTxt = o ? `<span class="${o.acc > o.accBase ? 'val-up' : 'val-down'}">${pct(o.acc)}</span> vs ${pct(o.accBase)}` : '—';
@@ -2127,12 +2736,21 @@
             <td class="mono">${tpTxt(bt.tp[1])}</td>
             <td class="mono">${tpTxt(bt.tp[-1])}</td>
             <td class="mono">${strongTxt}</td>
-            <td class="mono">${rsiCompare(item)}</td>`;
+            <td class="mono">${rsiCompare(item)}</td>
+            <td class="mono">${moveCompare(bt)}</td>`;
           tr.onclick = () => { btSelected = item.symbol; renderBacktestModal(); };
         }
         tbody.appendChild(tr);
       });
       drawCalibration(btSelected ? state[btSelected] : null);
+    }
+
+    function moveCompare(bt) {
+      const m = bt && bt.move;
+      if (!m) return '—';
+      const b = m.fit.base, sk = x => x == null ? '<span class="muted">pocos saltos</span>' : `<span class="${x > 0 ? 'val-up' : 'val-down'}">${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%</span>`;
+      const an = bt.analog && bt.analog.oos;
+      return `${pct(b.up / b.n, 0)} / ${pct(b.dn / b.n, 0)}` + (an ? ` · casos parecidos ${sk(an.skillUp)} / ${sk(an.skillDn)}` : '');
     }
 
     function rsiCompare(item) {
@@ -2221,12 +2839,13 @@
       const nVis = clamp(Math.floor(canvas.clientWidth / 7), MIN_VISIBLE_BARS, MAX_VISIBLE_BARS);
       const kl = all.slice(-nVis);
       const start = all.length - kl.length;
+      const lastClose = kl[kl.length - 1].close;
       const ser = item.ser;
       const font = `${Math.floor(10 * dpr)}px monospace`;
       ctx.font = font;
 
       // Distribución vertical: precio, MACD, RSI y eje de tiempo. Eje de precios a la derecha.
-      const axisW = 74 * dpr;
+      const axisW = 68 * dpr;
       const plotW = width - axisW;
       const priceH = height * 0.60;
       const macdTop = height * 0.62, macdH = height * 0.11;
@@ -2298,6 +2917,56 @@
       hLine(item.weeklySR.resistance, '#9c27b0', 1.2, [3, 3]);
       hLine(item.weeklySR.support, '#9c27b0', 1.2, [3, 3]);
       if (item.vp) hLine(item.vp.poc, '#ff9800', 1.4, [1, 3]);
+
+      // Niveles mayores: línea si están a la vista, marca en el borde si quedan fuera
+      if (item.majorNear) {
+        const mk = (l, lbl, isRes) => {
+          const d = (l.price / lastClose - 1) * 100;
+          const txt = `${isRes ? '▲' : '▼'} ${lbl} ${formatPrice(l.price)} (${d >= 0 ? '+' : ''}${d.toFixed(1)}%)`;
+          ctx.textAlign = 'right';
+          if (l.price >= minP && l.price <= maxP) {
+            const yy = getY(l.price);
+            ctx.strokeStyle = 'rgba(240,185,11,0.75)'; ctx.lineWidth = 1.6; ctx.setLineDash([8, 4]);
+            ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(plotW, yy); ctx.stroke(); ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(240,185,11,0.95)'; ctx.fillText(`${lbl} mayor`, plotW - 4 * dpr, yy - 3 * dpr);
+            return true;
+          }
+          return false;
+        };
+        const offAbove = [], offBelow = [];
+        item.majorNear.above.forEach((l, i) => { if (!mk(l, `R${i + 1}`, true) && l.price > maxP) offAbove.push([l, `R${i + 1}`]); });
+        item.majorNear.below.forEach((l, i) => { if (!mk(l, `S${i + 1}`, false) && l.price < minP) offBelow.push([l, `S${i + 1}`]); });
+        const tagOff = ([l, lbl], y, isRes) => {
+          const d = (l.price / lastClose - 1) * 100;
+          const txt = `${isRes ? '▲' : '▼'} ${lbl} ${formatPrice(l.price)}  ${d >= 0 ? '+' : ''}${d.toFixed(1)}%`;
+          ctx.font = font; ctx.textAlign = 'left';
+          const w = ctx.measureText(txt).width + 8 * dpr;
+          ctx.fillStyle = 'rgba(11,14,17,0.85)'; ctx.fillRect(2 * dpr, y - 10 * dpr, w, 14 * dpr);
+          ctx.strokeStyle = 'rgba(240,185,11,0.6)'; ctx.lineWidth = 1; ctx.strokeRect(2 * dpr + 0.5, y - 10 * dpr + 0.5, w - 1, 14 * dpr - 1);
+          ctx.fillStyle = '#f0b90b'; ctx.fillText(txt, 6 * dpr, y + 1 * dpr);
+        };
+        if (offAbove.length) tagOff(offAbove[0], 12 * dpr, true);
+        if (offBelow.length) tagOff(offBelow[0], priceH - 6 * dpr, false);
+      }
+
+      // FVG abiertos: caja desde la vela que los creó hasta el borde, solo la parte sin llenar
+      if (item.fvg && item.fvg.open.length) {
+        const shownF = item.fvg.open
+          .filter(g => g.remTop >= minP && g.remBot <= maxP)
+          .sort((a, b) => Math.abs((a.remTop + a.remBot) / 2 - lastClose) - Math.abs((b.remTop + b.remBot) / 2 - lastClose))
+          .slice(0, FVG.maxDraw);
+        shownF.forEach(g => {
+          const col = g.type > 0 ? 'rgba(14,203,129,' : 'rgba(246,70,93,';
+          const x0 = Math.max(0, (g.i - 1 - start) * cw);
+          const yTop = getY(Math.min(g.remTop, maxP)), yBot = getY(Math.max(g.remBot, minP));
+          ctx.fillStyle = col + '0.13)';
+          ctx.fillRect(x0, yTop, plotW - x0, Math.max(yBot - yTop, 1));
+          ctx.strokeStyle = col + '0.45)'; ctx.lineWidth = 1; ctx.setLineDash([]);
+          ctx.strokeRect(x0 + 0.5, yTop + 0.5, plotW - x0 - 1, Math.max(yBot - yTop - 1, 0));
+          ctx.fillStyle = col + '0.85)'; ctx.textAlign = 'left';
+          if (yBot - yTop > 9 * dpr) ctx.fillText('FVG', x0 + 3 * dpr, yTop + 9 * dpr);
+        });
+      }
 
       // Zonas de muro del libro (el tramo de 0,5% completo, sombreado)
       if (item.book) {
@@ -2415,9 +3084,11 @@
       ctx.strokeStyle = '#2b313a'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, axisTop); ctx.lineTo(width, axisTop); ctx.stroke();
       ctx.fillStyle = '#848e9c';
-      const step = Math.ceil(kl.length / Math.max(4, Math.floor(plotW / (90 * dpr))));
+      // Etiquetas separadas al menos 64 px para que no se pisen en gráficos angostos
+      const minGap = 64 * dpr;
+      const step = Math.max(1, Math.ceil(minGap / cw));
       kl.forEach((k, i) => {
-        if ((i % step === 0 && kl.length - 1 - i >= step / 2) || i === kl.length - 1) {
+        if ((i % step === 0 && (kl.length - 1 - i) * cw >= minGap) || i === kl.length - 1) {
           const x = i * cw + cw / 2;
           ctx.textAlign = i === 0 ? 'left' : (i === kl.length - 1 ? 'right' : 'center');
           const tx = i === 0 ? 2 * dpr : x;
